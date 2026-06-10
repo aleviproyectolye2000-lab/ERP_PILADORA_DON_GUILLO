@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel, EmailStr
@@ -78,6 +78,66 @@ class PermisosUsuarioUpdate(BaseModel):
 # ----------------------------------------------------
 # FUNCIÓN INTERNA PARA AUDITORÍA
 # ----------------------------------------------------
+
+def limpiar_valor_ip(valor: Optional[str]) -> Optional[str]:
+    """
+    Limpia valores recibidos desde headers de proxy.
+    Evita guardar valores vacíos, desconocidos o demasiado largos.
+    La columna auditoria_accesos.ip_equipo ya soporta hasta VARCHAR(100).
+    """
+    if valor is None:
+        return None
+
+    valor_limpio = valor.strip()
+
+    if not valor_limpio:
+        return None
+
+    if valor_limpio.lower() in ["unknown", "null", "none", "undefined"]:
+        return None
+
+    return valor_limpio[:100]
+
+
+def obtener_ip_cliente(request: Request) -> str:
+    """
+    Obtiene la IP real del cliente desde FastAPI.
+
+    En producción, Render trabaja detrás de proxy, por eso se revisan primero
+    los headers más comunes:
+
+    1. cf-connecting-ip
+    2. x-forwarded-for
+    3. x-real-ip
+    4. request.client.host
+    5. 127.0.0.1 como respaldo final
+
+    No se depende del frontend para conocer la IP real.
+    """
+
+    cf_ip = limpiar_valor_ip(request.headers.get("cf-connecting-ip"))
+    if cf_ip:
+        return cf_ip
+
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        ips = forwarded_for.split(",")
+        for ip in ips:
+            ip_limpia = limpiar_valor_ip(ip)
+            if ip_limpia:
+                return ip_limpia
+
+    real_ip = limpiar_valor_ip(request.headers.get("x-real-ip"))
+    if real_ip:
+        return real_ip
+
+    if request.client and request.client.host:
+        ip_cliente = limpiar_valor_ip(request.client.host)
+        if ip_cliente:
+            return ip_cliente
+
+    return "127.0.0.1"
+
 
 def registrar_auditoria_seguridad(
     db: Session,
@@ -240,7 +300,8 @@ def cerrar_sesiones_activas_usuario_seguridad(
 
 def registrar_acceso_login_seguridad(
     db: Session,
-    id_usuario: int
+    id_usuario: int,
+    ip_cliente: str
 ):
     """
     Registra una nueva sesión activa en auditoria_accesos.
@@ -262,7 +323,7 @@ def registrar_acceso_login_seguridad(
                 :id_usuario,
                 :fecha_ingreso,
                 :hora_ingreso,
-                '127.0.0.1',
+                :ip_equipo,
                 'Activa'
             )
             RETURNING id_acceso;
@@ -270,7 +331,8 @@ def registrar_acceso_login_seguridad(
         {
             "id_usuario": id_usuario,
             "fecha_ingreso": fecha_ingreso,
-            "hora_ingreso": hora_ingreso
+            "hora_ingreso": hora_ingreso,
+            "ip_equipo": ip_cliente or "127.0.0.1"
         }
     )
 
@@ -798,7 +860,11 @@ def desactivar_usuario(
 # ----------------------------------------------------
 
 @router.post("/login")
-def login(datos: LoginCreate, db: Session = Depends(get_db)):
+def login(
+    datos: LoginCreate,
+    request: Request,
+    db: Session = Depends(get_db)
+):
     try:
         resultado = db.execute(
             text("""
@@ -832,6 +898,8 @@ def login(datos: LoginCreate, db: Session = Depends(get_db)):
 
         usuario_login = dict(fila)
 
+        ip_cliente = obtener_ip_cliente(request)
+
         cerrar_sesiones_activas_usuario_seguridad(
             db=db,
             id_usuario=usuario_login["id_usuario"]
@@ -839,7 +907,8 @@ def login(datos: LoginCreate, db: Session = Depends(get_db)):
 
         id_acceso = registrar_acceso_login_seguridad(
             db=db,
-            id_usuario=usuario_login["id_usuario"]
+            id_usuario=usuario_login["id_usuario"],
+            ip_cliente=ip_cliente
         )
 
         registrar_auditoria_login(
@@ -851,6 +920,7 @@ def login(datos: LoginCreate, db: Session = Depends(get_db)):
         db.commit()
 
         usuario_login["id_acceso"] = id_acceso
+        usuario_login["ip_equipo"] = ip_cliente
 
         return {
             "mensaje": "Inicio de sesión correcto",
