@@ -32,7 +32,7 @@ function obtenerHoraActual() {
 }
 
 async function apiPutLocal(ruta, datos) {
-  const respuesta = await fetch(`http://127.0.0.1:8000${ruta}`, {
+  const respuesta = await fetch(`https://erp-piladora-don-guillo.onrender.com${ruta}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",

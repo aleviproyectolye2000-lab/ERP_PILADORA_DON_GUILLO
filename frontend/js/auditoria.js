@@ -14,7 +14,7 @@ let accionesFiltradasActuales = [];
 let paginaAccesos = 0;
 let paginaAcciones = 0;
 
-const API_AUDITORIA_BASE = "http://127.0.0.1:8000";
+const API_AUDITORIA_BASE = "";
 
 /* ---------------------------------------------------- */
 /* SESIÓN ACTUAL                                        */

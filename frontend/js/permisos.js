@@ -109,7 +109,7 @@ async function permisosApiGet(ruta) {
     return await window.apiGet(ruta);
   }
 
-  const respuesta = await fetch(`http://127.0.0.1:8000${ruta}`);
+  const respuesta = await fetch(`https://erp-piladora-don-guillo.onrender.com${ruta}`);
   const datos = await respuesta.json();
 
   if (!respuesta.ok) {
@@ -124,7 +124,7 @@ async function permisosApiPost(ruta, datosEnviar) {
     return await window.apiPost(ruta, datosEnviar);
   }
 
-  const respuesta = await fetch(`http://127.0.0.1:8000${ruta}`, {
+  const respuesta = await fetch(`https://erp-piladora-don-guillo.onrender.com${ruta}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

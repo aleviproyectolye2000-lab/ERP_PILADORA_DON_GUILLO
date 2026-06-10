@@ -18,7 +18,7 @@ async function seguridadApiGet(ruta) {
     return await window.apiGet(ruta);
   }
 
-  const respuesta = await fetch(`http://127.0.0.1:8000${ruta}`);
+  const respuesta = await fetch(`https://erp-piladora-don-guillo.onrender.com${ruta}`);
   const datos = await respuesta.json();
 
   if (!respuesta.ok) {
@@ -33,7 +33,7 @@ async function seguridadApiPost(ruta, datos) {
     return await window.apiPost(ruta, datos);
   }
 
-  const respuesta = await fetch(`http://127.0.0.1:8000${ruta}`, {
+  const respuesta = await fetch(`https://erp-piladora-don-guillo.onrender.com${ruta}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -55,7 +55,7 @@ async function seguridadApiPut(ruta, datos) {
     return await window.apiPut(ruta, datos);
   }
 
-  const respuesta = await fetch(`http://127.0.0.1:8000${ruta}`, {
+  const respuesta = await fetch(`https://erp-piladora-don-guillo.onrender.com${ruta}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -77,7 +77,7 @@ async function seguridadApiPatch(ruta, datos) {
     return await window.apiPatch(ruta, datos);
   }
 
-  const respuesta = await fetch(`http://127.0.0.1:8000${ruta}`, {
+  const respuesta = await fetch(`https://erp-piladora-don-guillo.onrender.com${ruta}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -99,7 +99,7 @@ async function seguridadApiDelete(ruta) {
     return await window.apiDelete(ruta);
   }
 
-  const respuesta = await fetch(`http://127.0.0.1:8000${ruta}`, {
+  const respuesta = await fetch(`https://erp-piladora-don-guillo.onrender.com${ruta}`, {
     method: "DELETE",
   });
 
