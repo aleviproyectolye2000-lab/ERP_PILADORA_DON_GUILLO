@@ -382,11 +382,11 @@ function construirPermisoConsultaGerente(pagina) {
 
   return {
     puede_ver: true,
-    puede_crear: false,
-    puede_editar: false,
-    puede_eliminar: false,
+    puede_crear: esReporte,    // Modificado: El gerente SÍ puede crear en Reportes
+    puede_editar: esReporte,   // Modificado: El gerente SÍ puede editar en Reportes
+    puede_eliminar: esReporte, // Modificado: El gerente SÍ puede eliminar en Reportes
     puede_consultar: true,
-    puede_generar_reporte: esReporte,
+    puede_generar_reporte: true,
   };
 }
 
@@ -423,7 +423,17 @@ async function cargarPermisosUsuarioActual() {
     const permisoPagina = obtenerPermisoPorPagina(paginaActual);
 
     if (permisoPagina) {
-      permisoModuloActual = permisoPagina;
+      // Tomamos los permisos que el Admin le haya configurado dinámicamente en la BD
+      permisoModuloActual = { ...permisoPagina };
+      
+      // Excepción Absoluta: Si es Gerente y está en Reportes e IA, forzamos control total
+      // independientemente de si el Admin olvidó darle los checks.
+      if (esGerenteERP() && paginaActual.includes("reporte")) {
+        permisoModuloActual.puede_crear = true;
+        permisoModuloActual.puede_editar = true;
+        permisoModuloActual.puede_eliminar = true;
+        permisoModuloActual.puede_generar_reporte = true;
+      }
     } else if (esGerenteERP()) {
       permisoModuloActual = construirPermisoConsultaGerente(paginaActual);
     } else {

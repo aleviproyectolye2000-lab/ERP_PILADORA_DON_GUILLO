@@ -1020,7 +1020,6 @@ function renderizarPermisosUsuario(usuario) {
   tablaPermisos.innerHTML = "";
 
   const adminPrincipal = esUsuarioAdminPrincipal(usuario);
-  const gerente = esPerfilGerenteNombre(usuario.nombre_perfil);
 
   modulosSeguridad.forEach((modulo) => {
     const permisoExistente = permisosUsuarioSeleccionado.find(
@@ -1043,22 +1042,7 @@ function renderizarPermisosUsuario(usuario) {
       puedeReporte = true;
     }
 
-    if (gerente && !adminPrincipal) {
-      puedeVer = true;
-      puedeCrear = false;
-      puedeEditar = false;
-      puedeEliminar = false;
-      puedeConsultar = true;
-
-      const nombreModulo = normalizarTextoSeguridad(modulo.nombre_modulo);
-      puedeReporte =
-        nombreModulo.includes("reporte") ||
-        nombreModulo.includes("ia") ||
-        permisoExistente?.puede_generar_reporte === true;
-    }
-
     const disabledAdmin = adminPrincipal ? "disabled" : "";
-    const disabledGerenteOperativo = gerente && !adminPrincipal ? "disabled" : "";
 
     const fila = document.createElement("tr");
 
@@ -1074,15 +1058,15 @@ function renderizarPermisosUsuario(usuario) {
       </td>
 
       <td class="text-center">
-        <input type="checkbox" class="form-check-input permiso-crear-check" ${puedeCrear ? "checked" : ""} ${disabledAdmin || disabledGerenteOperativo}>
+        <input type="checkbox" class="form-check-input permiso-crear-check" ${puedeCrear ? "checked" : ""} ${disabledAdmin}>
       </td>
 
       <td class="text-center">
-        <input type="checkbox" class="form-check-input permiso-editar-check" ${puedeEditar ? "checked" : ""} ${disabledAdmin || disabledGerenteOperativo}>
+        <input type="checkbox" class="form-check-input permiso-editar-check" ${puedeEditar ? "checked" : ""} ${disabledAdmin}>
       </td>
 
       <td class="text-center">
-        <input type="checkbox" class="form-check-input permiso-eliminar-check" ${puedeEliminar ? "checked" : ""} ${disabledAdmin || disabledGerenteOperativo}>
+        <input type="checkbox" class="form-check-input permiso-eliminar-check" ${puedeEliminar ? "checked" : ""} ${disabledAdmin}>
       </td>
 
       <td class="text-center">
@@ -1106,23 +1090,12 @@ function renderizarPermisosUsuario(usuario) {
     `;
     tablaPermisos.appendChild(aviso);
   }
-
-  if (gerente && !adminPrincipal) {
-    const aviso = document.createElement("tr");
-    aviso.innerHTML = `
-      <td colspan="7" class="text-center text-warning fw-bold">
-        El perfil Gerente se mantiene en modo consulta, reportes e IA. No puede tener permisos de crear, editar ni eliminar.
-      </td>
-    `;
-    tablaPermisos.appendChild(aviso);
-  }
 }
 
 function construirPermisosDesdeTabla(usuario) {
   const filas = document.querySelectorAll("#tablaPermisos tr");
   const permisos = [];
   const adminPrincipal = esUsuarioAdminPrincipal(usuario);
-  const gerente = esPerfilGerenteNombre(usuario.nombre_perfil);
 
   filas.forEach((fila) => {
     const idModulo = fila.querySelector(".permiso-id-modulo")?.value;
@@ -1145,14 +1118,6 @@ function construirPermisosDesdeTabla(usuario) {
       puedeEliminar = true;
       puedeConsultar = true;
       puedeReporte = true;
-    }
-
-    if (gerente && !adminPrincipal) {
-      puedeVer = true;
-      puedeCrear = false;
-      puedeEditar = false;
-      puedeEliminar = false;
-      puedeConsultar = true;
     }
 
     permisos.push({
@@ -1183,19 +1148,6 @@ function validarPermisosUsuarioSeguridad(usuario, permisos) {
   if (!Array.isArray(permisos) || permisos.length === 0) {
     alert("No existen permisos para guardar.");
     return false;
-  }
-
-  const gerente = esPerfilGerenteNombre(usuario.nombre_perfil);
-
-  if (gerente) {
-    const tienePermisosOperativos = permisos.some((permiso) => {
-      return permiso.puede_crear || permiso.puede_editar || permiso.puede_eliminar;
-    });
-
-    if (tienePermisosOperativos) {
-      alert("El perfil Gerente no puede tener permisos de crear, editar ni eliminar. Solo consulta, reportes e IA.");
-      return false;
-    }
   }
 
   const tieneAlgunAcceso = permisos.some((permiso) => {
