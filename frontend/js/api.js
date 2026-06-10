@@ -1,4 +1,4 @@
-const API_URL = "http://127.0.0.1:8000";
+const API_URL = "https://erp-piladora-don-guillo.onrender.com";
 
 window.apiGet = async function (ruta) {
   const respuesta = await fetch(`${API_URL}${ruta}`);
