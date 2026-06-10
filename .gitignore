@@ -1,3 +1,15 @@
 .env
 *.env
 backend/.env
+
+venv/
+backend/venv/
+.venv/
+backend/.venv/
+
+__pycache__/
+*.pyc
+.pytest_cache/
+
+.DS_Store
+Thumbs.db
