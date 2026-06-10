@@ -1664,7 +1664,7 @@ async function guardarHistorialIA() {
 
     mostrarMensajeGuardarIA("info", "Guardando recomendación en historial IA...");
 
-    const respuesta = await fetch("http://127.0.0.1:8000/api/ia/guardar-recomendacion", {
+    const respuesta = await fetch("https://erp-piladora-don-guillo.onrender.com/api/ia/guardar-recomendacion", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
