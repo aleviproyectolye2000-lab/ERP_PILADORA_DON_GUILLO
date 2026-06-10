@@ -1,0 +1,414 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ventas - ERP Piladora Don Guillo</title>
+
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+
+  <body>
+    <div class="d-flex">
+      <aside class="sidebar">
+        <h4 class="text-white fw-bold text-center mb-4">Don Guillo</h4>
+
+        <a href="dashboard.html" class="sidebar-link">Panel principal</a>
+        <a href="compras.html" class="sidebar-link">Compras y báscula</a>
+        <a href="inventario.html" class="sidebar-link">Inventario</a>
+        <a href="produccion.html" class="sidebar-link">Producción</a>
+        <a href="ventas.html" class="sidebar-link active">Ventas</a>
+        <a href="talento_humano.html" class="sidebar-link">Talento Humano</a>
+        <a href="auditoria.html" class="sidebar-link">Auditoría</a>
+        <a href="seguridad.html" class="sidebar-link">Seguridad y Usuarios</a>
+        <a href="activos.html" class="sidebar-link">Activos</a>
+        <a href="reportes.html" class="sidebar-link">Reportes e IA</a>
+
+        <button class="btn btn-light w-100 mt-4" onclick="cerrarSesion()">
+          Cerrar sesión
+        </button>
+      </aside>
+
+      <main class="content">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <div>
+            <h2 class="fw-bold text-success">Ventas y Comercialización</h2>
+            <p class="text-muted mb-0">
+              Registro de ventas de arroz pilado y subproductos.
+            </p>
+          </div>
+
+          <div class="text-end">
+            <strong id="usuarioActual">Usuario</strong><br />
+            <small id="perfilActual" class="text-muted">Perfil</small>
+          </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <p class="text-muted mb-1">Ventas registradas</p>
+                <h3 class="text-success fw-bold" id="totalVentas">0</h3>
+                <small>Total de comprobantes</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <p class="text-muted mb-1">Ingresos cobrados</p>
+                <h3 class="text-success fw-bold" id="ingresosCobrados">$ 0.00</h3>
+                <small>Dinero recibido en caja</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <p class="text-muted mb-1">Cuentas por cobrar</p>
+                <h3 class="text-warning fw-bold" id="cuentasPorCobrar">$ 0.00</h3>
+                <small id="clientesPorCobrar">0 clientes pendientes</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <p class="text-muted mb-1">Producto más vendido</p>
+                <h3 class="text-success fw-bold" id="productoMasVendido">--</h3>
+                <small>Según cantidad vendida</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+          <div class="card-body">
+            <h5 class="text-success fw-bold mb-3">Nueva venta</h5>
+
+            <form id="formVenta" class="row g-3">
+              <input type="hidden" id="idVentaEditando" />
+
+              <div class="col-md-4">
+                <label class="form-label">Cliente</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="clienteVenta"
+                  placeholder="Nombre del cliente"
+                  pattern="^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$"
+                  title="Solo se permiten letras y espacios"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Cédula o RUC</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="identificacionCliente"
+                  maxlength="13"
+                  minlength="10"
+                  pattern="^\d{10}(\d{3})?$"
+                  title="Debe ingresar 10 dígitos para cédula o 13 para RUC (solo números)"
+                  placeholder="10 dígitos cédula o 13 RUC"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Fecha de venta</label>
+                <input
+                  type="date"
+                  class="form-control"
+                  id="fechaVenta"
+                  required
+                />
+              </div>
+
+              <div class="col-md-2">
+                <label class="form-label">Comprobante</label>
+                <select class="form-select" id="tipoComprobante" required>
+                  <option value="">Seleccione</option>
+                  <option value="Factura">Factura</option>
+                  <option value="Nota de venta">Nota de venta</option>
+                  <option value="Recibo">Recibo</option>
+                </select>
+              </div>
+
+              <div class="col-md-12">
+                <hr />
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">Producto vendido</label>
+                <select class="form-select" id="productoVenta" required>
+                  <option value="">Seleccione un producto disponible</option>
+                </select>
+                <small class="text-muted">
+                  Solo deben aparecer productos con stock disponible.
+                </small>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Bodega</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="bodegaVenta"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Lote</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="loteVenta"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-2">
+                <label class="form-label">Stock disponible</label>
+                <input
+                  type="number"
+                  class="form-control"
+                  id="stockDisponibleVenta"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Unidad de venta</label>
+                <select class="form-select" id="unidadVenta" required>
+                  <option value="">Seleccione</option>
+                  <option value="Libra">Libra</option>
+                  <option value="Arroba">Arroba - 25 lb</option>
+                  <option value="Medio quintal">Medio quintal - 50 lb</option>
+                  <option value="Quintal">Quintal - 100 lb</option>
+                </select>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Cantidad</label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  class="form-control"
+                  id="cantidadVenta"
+                  placeholder="Cantidad a vender"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Cantidad equivalente en qq</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  class="form-control"
+                  id="cantidadQuintalesVenta"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Precio unitario</label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  class="form-control"
+                  id="precioUnitarioVenta"
+                  placeholder="Precio según unidad"
+                  required
+                />
+                <small class="text-muted">
+                  Puede venir del inventario o editarse en la venta.
+                </small>
+              </div>
+
+              <div class="col-md-12">
+                <hr />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Subtotal</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  class="form-control"
+                  id="subtotalVenta"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Descuento</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  id="descuentoVenta"
+                  value="0"
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">IVA</label>
+                <select class="form-select" id="ivaVenta" required>
+                  <option value="0">0%</option>
+                  <option value="15">15%</option>
+                </select>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Total a pagar</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  class="form-control"
+                  id="totalVenta"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Estado de pago</label>
+                <select class="form-select" id="estadoPagoVenta" required>
+                  <option value="">Seleccione</option>
+                  <option value="Pagado">Pagado</option>
+                  <option value="Pendiente">Pendiente</option>
+                  <option value="Parcial">Parcial</option>
+                </select>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Forma de pago</label>
+                <select class="form-select" id="formaPagoVenta" required>
+                  <option value="">Seleccione</option>
+                  <option value="Efectivo">Efectivo</option>
+                  <option value="Transferencia">Transferencia</option>
+                  <option value="Crédito">Crédito</option>
+                </select>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Valor recibido</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  id="valorRecibidoVenta"
+                  value="0"
+                />
+                <small class="text-muted">
+                  Si es pendiente, puede quedar en 0.
+                </small>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Saldo pendiente</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  class="form-control"
+                  id="saldoPendienteVenta"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-12">
+                <label class="form-label">Observación</label>
+                <textarea
+                  class="form-control"
+                  id="observacionVenta"
+                  rows="2"
+                  maxlength="250"
+                  placeholder="Observación de la venta"
+                ></textarea>
+              </div>
+
+              <div class="col-md-12">
+                <button type="submit" class="btn btn-success" id="btnGuardarVenta">
+                  Registrar venta
+                </button>
+
+                <button type="reset" class="btn btn-secondary" id="btnLimpiarVenta">
+                  Limpiar
+                </button>
+              </div>
+
+              <div class="col-md-12">
+                <div id="mensajeVenta" class="alert d-none mt-2"></div>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <section class="mt-4">
+          <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+              <h5 class="mb-0">Ventas registradas</h5>
+            </div>
+
+            <div class="card-body table-responsive">
+              <table class="table table-bordered table-hover align-middle">
+                <thead class="table-success">
+                  <tr>
+                    <th>N°</th>
+                    <th>Fecha</th>
+                    <th>Cliente</th>
+                    <th>Comprobante</th>
+                    <th>Producto</th>
+                    <th>Bodega</th>
+                    <th>Lote</th>
+                    <th>Unidad</th>
+                    <th>Cantidad</th>
+                    <th>Precio</th>
+                    <th>Subtotal</th>
+                    <th>Descuento</th>
+                    <th>IVA</th>
+                    <th>Total</th>
+                    <th>Recibido</th>
+                    <th>Saldo</th>
+                    <th>Estado pago</th>
+                    <th>Forma pago</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+
+                <tbody id="tablaVentas">
+                  <tr>
+                    <td colspan="19" class="text-center">
+                      Cargando ventas...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/permisos.js"></script>
+    <script src="js/ventas.js"></script>
+  </body>
+</html>

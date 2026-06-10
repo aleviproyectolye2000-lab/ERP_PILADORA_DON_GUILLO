@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Seguridad y Usuarios - ERP Piladora Don Guillo</title>
+
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+
+  <body>
+    <div class="d-flex">
+      <aside class="sidebar">
+        <h4 class="text-white fw-bold text-center mb-4">Don Guillo</h4>
+
+        <a href="dashboard.html" class="sidebar-link">Panel principal</a>
+        <a href="compras.html" class="sidebar-link">Compras y báscula</a>
+        <a href="inventario.html" class="sidebar-link">Inventario</a>
+        <a href="produccion.html" class="sidebar-link">Producción</a>
+        <a href="ventas.html" class="sidebar-link">Ventas</a>
+        <a href="talento_humano.html" class="sidebar-link">Talento Humano</a>
+        <a href="auditoria.html" class="sidebar-link">Auditoría</a>
+        <a href="seguridad.html" class="sidebar-link active">Seguridad y Usuarios</a>
+        <a href="activos.html" class="sidebar-link">Activos</a>
+        <a href="reportes.html" class="sidebar-link">Reportes e IA</a>
+
+        <button class="btn btn-light w-100 mt-4" onclick="cerrarSesion()">
+          Cerrar sesión
+        </button>
+      </aside>
+
+      <main class="content">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <div>
+            <h2 class="fw-bold text-success">Seguridad y Usuarios</h2>
+            <p class="text-muted mb-0">
+              Gestión de usuarios, perfiles y permisos de acceso al ERP.
+            </p>
+          </div>
+
+          <div class="text-end">
+            <strong id="usuarioActual">Usuario</strong><br />
+            <small id="perfilActual" class="text-muted">Perfil</small>
+          </div>
+        </div>
+
+        <div class="alert alert-warning shadow-sm" role="alert">
+          <strong>Importante:</strong>
+          este módulo es exclusivo del administrador. Desde aquí se crean usuarios,
+          se activan o desactivan cuentas y se asignan permisos por módulo.
+          El usuario administrador principal no debe ser desactivado, eliminado
+          ni quedarse sin permisos de control total.
+        </div>
+
+        <div class="alert alert-info shadow-sm" role="alert">
+          <strong>Regla de seguridad:</strong>
+          el administrador puede asignar permisos personalizados a cada usuario
+          según la necesidad del negocio. Por ejemplo, un usuario puede tener
+          permisos de compras, ventas, talento humano o reportes si el administrador
+          lo autoriza. El perfil Gerente debe mantenerse orientado a consulta,
+          reportes e inteligencia artificial, sin operaciones de creación,
+          modificación o eliminación.
+        </div>
+
+        <div class="row g-4 mb-4">
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Usuarios registrados</h6>
+                <h3 class="fw-bold text-success" id="totalUsuarios">0</h3>
+                <small>Total de usuarios</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Usuarios activos</h6>
+                <h3 class="fw-bold text-success" id="usuariosActivos">0</h3>
+                <small>Cuentas habilitadas</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Usuarios inactivos</h6>
+                <h3 class="fw-bold text-danger" id="usuariosInactivos">0</h3>
+                <small>Cuentas desactivadas</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Módulos del sistema</h6>
+                <h3 class="fw-bold text-success" id="totalModulos">0</h3>
+                <small>Módulos disponibles</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Registro y edición de usuario</h5>
+          </div>
+
+          <div class="card-body">
+            <form id="formUsuario" class="row g-3">
+              <input type="hidden" id="idUsuarioEditar" />
+
+              <div class="col-md-3">
+                <label class="form-label">Nombres</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="nombresUsuario"
+                  placeholder="Ejemplo: Carlos"
+                  minlength="2"
+                  maxlength="60"
+                  pattern="^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$"
+                  title="Ingrese solo letras y espacios. No se permiten números ni caracteres especiales."
+                  autocomplete="off"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Apellidos</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="apellidosUsuario"
+                  placeholder="Ejemplo: Zambrano López"
+                  minlength="2"
+                  maxlength="60"
+                  pattern="^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$"
+                  title="Ingrese solo letras y espacios. No se permiten números ni caracteres especiales."
+                  autocomplete="off"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Usuario</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="usuarioSistema"
+                  placeholder="Ejemplo: compras"
+                  minlength="4"
+                  maxlength="30"
+                  pattern="^[A-Za-z0-9._-]{4,30}$"
+                  title="El usuario debe tener entre 4 y 30 caracteres. Use solo letras, números, punto, guion o guion bajo. No use espacios."
+                  autocomplete="off"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Correo</label>
+                <input
+                  type="email"
+                  class="form-control"
+                  id="correoUsuario"
+                  placeholder="correo@ejemplo.com"
+                  maxlength="100"
+                  title="Ingrese un correo electrónico válido. Ejemplo: usuario@donguillo.com"
+                  autocomplete="off"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Contraseña</label>
+                <input
+                  type="password"
+                  class="form-control"
+                  id="contrasenaUsuario"
+                  placeholder="Contraseña inicial"
+                  minlength="8"
+                  maxlength="40"
+                  pattern="^(?=.*[A-Za-z])(?=.*\d).{8,40}$"
+                  title="La contraseña debe tener entre 8 y 40 caracteres, al menos una letra y al menos un número."
+                  autocomplete="new-password"
+                />
+
+                <div class="form-check mt-2">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    id="mostrarContrasenaUsuario"
+                  />
+                  <label class="form-check-label" for="mostrarContrasenaUsuario">
+                    Mostrar contraseña
+                  </label>
+                </div>
+
+                <small class="text-muted">
+                  Obligatoria solo al crear un usuario nuevo. Mínimo 8 caracteres,
+                  con letras y números.
+                </small>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Perfil</label>
+                <select class="form-select" id="perfilUsuario" required>
+                  <option value="">Seleccione</option>
+                </select>
+                <small class="text-muted">
+                  El perfil define la base de permisos del usuario.
+                </small>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Estado</label>
+                <select class="form-select" id="estadoUsuario" required>
+                  <option value="true">Activo</option>
+                  <option value="false">Inactivo</option>
+                </select>
+                <small class="text-muted">
+                  Un usuario inactivo no debe poder ingresar al ERP.
+                </small>
+              </div>
+
+              <div class="col-md-3 d-flex align-items-end gap-2">
+                <button
+                  type="submit"
+                  class="btn btn-success permiso-crear"
+                  id="btnGuardarUsuario"
+                >
+                  Guardar
+                </button>
+
+                <button
+                  type="button"
+                  class="btn btn-secondary"
+                  id="btnLimpiarUsuario"
+                >
+                  Limpiar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Usuarios del sistema</h5>
+          </div>
+
+          <div class="card-body table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+              <thead class="table-success">
+                <tr>
+                  <th>ID</th>
+                  <th>Nombres</th>
+                  <th>Apellidos</th>
+                  <th>Usuario</th>
+                  <th>Correo</th>
+                  <th>Perfil</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+
+              <tbody id="tablaUsuarios">
+                <tr>
+                  <td colspan="8" class="text-center text-muted">
+                    Cargando usuarios...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+          <div
+            class="card-header bg-success text-white d-flex justify-content-between align-items-center"
+          >
+            <h5 class="mb-0">Permisos por usuario</h5>
+            <span
+              class="badge bg-light text-success"
+              id="usuarioPermisosSeleccionado"
+            >
+              Ningún usuario seleccionado
+            </span>
+          </div>
+
+          <div class="card-body">
+            <input type="hidden" id="idUsuarioPermisos" />
+
+            <p class="text-muted">
+              Seleccione un usuario desde la tabla y marque los permisos que tendrá
+              en cada módulo. El administrador puede asignar permisos personalizados
+              según las funciones reales del trabajador.
+            </p>
+
+            <div class="alert alert-light border shadow-sm mb-3" role="alert">
+              <strong>Nota:</strong>
+              no se debe quitar el control total al administrador principal.
+              Los permisos de gerente deben mantenerse para ver, consultar,
+              reportes e inteligencia artificial, sin acciones operativas como
+              crear, editar o eliminar.
+            </div>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-hover align-middle">
+                <thead class="table-success text-center">
+                  <tr>
+                    <th class="text-start">Módulo</th>
+                    <th>Ver</th>
+                    <th>Crear</th>
+                    <th>Editar</th>
+                    <th>Eliminar</th>
+                    <th>Consultar</th>
+                    <th>Reporte</th>
+                  </tr>
+                </thead>
+
+                <tbody id="tablaPermisos">
+                  <tr>
+                    <td colspan="7" class="text-center text-muted">
+                      Seleccione un usuario para cargar sus permisos.
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="d-flex gap-2 mt-3">
+              <button
+                type="button"
+                class="btn btn-success permiso-editar"
+                id="btnGuardarPermisos"
+              >
+                Guardar permisos
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-secondary"
+                id="btnLimpiarPermisos"
+              >
+                Limpiar selección
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Cambio de contraseña</h5>
+          </div>
+
+          <div class="card-body">
+            <form id="formCambiarContrasena" class="row g-3">
+              <input type="hidden" id="idUsuarioContrasena" />
+
+              <div class="col-md-4">
+                <label class="form-label">Usuario seleccionado</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="usuarioContrasenaTexto"
+                  readonly
+                  placeholder="Seleccione un usuario"
+                />
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">Nueva contraseña</label>
+                <input
+                  type="password"
+                  class="form-control"
+                  id="nuevaContrasena"
+                  placeholder="Ingrese nueva contraseña"
+                  minlength="8"
+                  maxlength="40"
+                  pattern="^(?=.*[A-Za-z])(?=.*\d).{8,40}$"
+                  title="La nueva contraseña debe tener entre 8 y 40 caracteres, al menos una letra y al menos un número."
+                  autocomplete="new-password"
+                />
+
+                <div class="form-check mt-2">
+                  <input
+                    class="form-check-input"
+                    type="checkbox"
+                    id="mostrarNuevaContrasena"
+                  />
+                  <label class="form-check-label" for="mostrarNuevaContrasena">
+                    Mostrar contraseña
+                  </label>
+                </div>
+
+                <small class="text-muted">
+                  Use una contraseña segura. Mínimo 8 caracteres, con letras y números.
+                </small>
+              </div>
+
+              <div class="col-md-4 d-flex align-items-end">
+                <button type="submit" class="btn btn-warning permiso-editar">
+                  Cambiar contraseña
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/permisos.js"></script>
+    <script src="js/seguridad.js"></script>
+  </body>
+</html>

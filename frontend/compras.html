@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Compras y Báscula - ERP Piladora Don Guillo</title>
+
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+
+  <body>
+    <div class="d-flex">
+      <aside class="sidebar">
+        <h4 class="text-white fw-bold text-center mb-4">Don Guillo</h4>
+
+        <a href="dashboard.html" class="sidebar-link">Panel principal</a>
+        <a href="compras.html" class="sidebar-link active">Compras y báscula</a>
+        <a href="inventario.html" class="sidebar-link">Inventario</a>
+        <a href="produccion.html" class="sidebar-link">Producción</a>
+        <a href="ventas.html" class="sidebar-link">Ventas</a>
+        <a href="talento_humano.html" class="sidebar-link">Talento Humano</a>
+        <a href="activos.html" class="sidebar-link">Activos</a>
+        <a href="auditoria.html" class="sidebar-link">Auditoría</a>
+        <a href="seguridad.html" class="sidebar-link">Seguridad y Usuarios</a>
+        <a href="reportes.html" class="sidebar-link">Reportes e IA</a>
+
+        <button class="btn btn-light w-100 mt-4" onclick="cerrarSesion()">
+          Cerrar sesión
+        </button>
+      </aside>
+
+      <main class="content">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <div>
+            <h2 class="fw-bold text-success">Compras, Recepción y Báscula</h2>
+            <p class="text-muted mb-0">
+              Registro de ingreso de arroz en cáscara a la piladora.
+            </p>
+          </div>
+
+          <div class="text-end">
+            <strong id="usuarioActual">Usuario</strong><br />
+            <small id="perfilActual" class="text-muted">Perfil</small>
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+          <div class="card-body">
+            <h5 class="text-success fw-bold mb-3">
+              Nueva compra de arroz en cáscara
+            </h5>
+
+            <form id="formCompra" class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label">Proveedor o agricultor</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="proveedorCompra"
+                  placeholder="Ejemplo: Pedro Zambrano"
+                  pattern="^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$"
+                  title="Solo se permiten letras y espacios"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Cédula o RUC</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="identificacionProveedor"
+                  maxlength="13"
+                  minlength="10"
+                  pattern="^\d{10}(\d{3})?$"
+                  title="Debe ingresar 10 dígitos para cédula o 13 para RUC (solo números)"
+                  placeholder="10 dígitos cédula o 13 RUC"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Fecha de recepción</label>
+                <input
+                  type="date"
+                  class="form-control"
+                  id="fechaCompra"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Placa del vehículo</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="placaVehiculo"
+                  placeholder="Ejemplo: ABC-1234"
+                  pattern="^[A-Za-z]{3}-\d{3,4}$"
+                  title="El formato debe ser 3 letras, un guion y 3 o 4 números (Ej: ABC-1234)"
+                  oninput="this.value = this.value.toUpperCase()"
+                />
+              </div>
+
+              <div class="col-md-5">
+                <label class="form-label">Chofer</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="choferCompra"
+                  placeholder="Nombre del chofer"
+                  pattern="^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$"
+                  title="Solo se permiten letras y espacios"
+                />
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">Producto recibido</label>
+                <select class="form-select" id="productoCompra" required>
+                  <option value="1" selected>Arroz en cáscara</option>
+                </select>
+              </div>
+
+              <hr class="mt-3" />
+
+              <div class="col-md-3">
+                <label class="form-label">Unidad de báscula</label>
+                <select class="form-select" id="unidadBascula" required>
+                  <option value="Libras" selected>Libras</option>
+                  <option value="Kilogramos">Kilogramos</option>
+                  <option value="Toneladas">Toneladas</option>
+                </select>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Peso de entrada</label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  class="form-control"
+                  id="pesoEntrada"
+                  required
+                />
+                <small class="text-muted">Carro cargado</small>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Peso de salida</label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  class="form-control"
+                  id="pesoSalida"
+                  required
+                />
+                <small class="text-muted">Carro vacío</small>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Peso neto</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  id="pesoNeto"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">Peso neto en libras</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  id="pesoNetoLibras"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">Quintales brutos</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  id="quintalesBrutos"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">Sacas brutas</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  id="sacasBrutas"
+                  readonly
+                />
+              </div>
+
+              <hr class="mt-3" />
+
+              <div class="col-md-3">
+                <label class="form-label">Humedad %</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  class="form-control"
+                  id="humedadCompra"
+                  placeholder="Ejemplo: 20"
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Humedad base %</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  class="form-control"
+                  id="humedadBase"
+                  value="14"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label" id="labelDescuentoHumedad">
+                  Descuento por humedad
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  id="descuentoHumedad"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Impurezas %</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  class="form-control"
+                  id="impurezasCompra"
+                  placeholder="Ejemplo: 5"
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Impureza base %</label>
+                <input
+                  type="number"
+                  min="0"
+                  max="100"
+                  step="0.01"
+                  class="form-control"
+                  id="impurezaBase"
+                  value="5"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label" id="labelDescuentoImpureza">
+                  Descuento por impureza
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  id="descuentoImpureza"
+                  readonly
+                />
+              </div>
+
+              <hr class="mt-3" />
+
+              <div class="col-md-4">
+                <label class="form-label">Peso líquido en libras</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  id="pesoLiquidoLibras"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">Quintales líquidos</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  id="quintalesLiquidos"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-4">
+                <label class="form-label">Sacas líquidas</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  id="sacasLiquidas"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Tipo de pago</label>
+                <select class="form-select" id="tipoPagoCompra" required>
+                  <option value="Por saca" selected>Por saca</option>
+                  <option value="Por quintal">Por quintal</option>
+                </select>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label" id="labelPrecioPactado">
+                  Precio pactado por saca
+                </label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="0.01"
+                  class="form-control"
+                  id="precioPactado"
+                  required
+                />
+              </div>
+
+              <div class="col-md-2">
+                <label class="form-label">Total bruto</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  id="totalBruto"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-2">
+                <label class="form-label">Total descuento</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  id="totalDescuento"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-2">
+                <label class="form-label">Total a pagar</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  class="form-control"
+                  id="totalCompra"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Estado de pago</label>
+                <select class="form-select" id="estadoPagoCompra" required>
+                  <option value="Pagado">Pagado</option>
+                  <option value="Pendiente">Pendiente</option>
+                  <option value="Parcial">Parcial</option>
+                </select>
+              </div>
+
+              <div class="col-md-12">
+                <label class="form-label">Observación</label>
+                <textarea
+                  class="form-control"
+                  id="observacionCompra"
+                  rows="2"
+                  maxlength="250"
+                  placeholder="Observación de la compra"
+                ></textarea>
+              </div>
+
+              <div class="col-md-12">
+                <button type="submit" class="btn btn-success">
+                  Registrar compra
+                </button>
+                <button type="reset" class="btn btn-secondary">Limpiar</button>
+              </div>
+
+              <div class="col-md-12">
+                <div id="mensajeCompra" class="alert d-none mt-2"></div>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <section class="mt-4">
+          <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+              <h5 class="mb-0">Compras registradas</h5>
+            </div>
+
+            <div class="card-body table-responsive">
+              <table class="table table-bordered table-hover align-middle">
+                <thead class="table-success">
+                  <tr>
+                    <th>N°</th>
+                    <th>Fecha</th>
+                    <th>Proveedor</th>
+                    <th>Vehículo</th>
+                    <th>Chofer</th>
+                    <th>Unidad</th>
+                    <th>Peso bruto qq</th>
+                    <th>Peso líquido qq</th>
+                    <th>Sacas líquidas</th>
+                    <th>Pago</th>
+                    <th>Precio pactado</th>
+                    <th>Total bruto</th>
+                    <th>Descuento</th>
+                    <th>Total a pagar</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                  </tr>
+                </thead>
+
+                <tbody id="tablaCompras">
+                  <tr>
+                    <td colspan="16" class="text-center">
+                      Cargando compras...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/permisos.js"></script>
+    <script src="js/compras.js"></script>
+  </body>
+</html>

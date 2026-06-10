@@ -1,0 +1,604 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Reportes e IA - ERP Piladora Don Guillo</title>
+
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  </head>
+
+  <body>
+    <div class="d-flex">
+      <aside class="sidebar">
+        <h4 class="text-white fw-bold text-center mb-4">Don Guillo</h4>
+
+        <a href="dashboard.html" class="sidebar-link">Panel principal</a>
+        <a href="compras.html" class="sidebar-link">Compras y báscula</a>
+        <a href="inventario.html" class="sidebar-link">Inventario</a>
+        <a href="produccion.html" class="sidebar-link">Producción</a>
+        <a href="ventas.html" class="sidebar-link">Ventas</a>
+        <a href="talento_humano.html" class="sidebar-link">Talento Humano</a>
+        <a href="auditoria.html" class="sidebar-link">Auditoría</a>
+        <a href="seguridad.html" class="sidebar-link">Seguridad y Usuarios</a>
+        <a href="activos.html" class="sidebar-link">Activos</a>
+        <a href="reportes.html" class="sidebar-link active">Reportes e IA</a>
+
+        <button class="btn btn-light w-100 mt-4" onclick="cerrarSesion()">
+          Cerrar sesión
+        </button>
+      </aside>
+
+      <main class="content">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <div>
+            <h2 class="fw-bold text-success">
+              Reportes e Inteligencia Artificial
+            </h2>
+            <p class="text-muted mb-0">
+              Panel gerencial para análisis de compras, ventas, inventario,
+              producción y toma de decisiones.
+            </p>
+          </div>
+
+          <div class="text-end">
+            <strong id="usuarioActual">Usuario</strong><br />
+            <small id="perfilActual" class="text-muted">Perfil</small>
+          </div>
+        </div>
+
+        <!-- TARJETAS DE RESUMEN -->
+        <div class="row g-4 mb-4">
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Total compras</h6>
+                <h3 id="reporteTotalCompras" class="fw-bold text-success">0</h3>
+                <small>Compras registradas</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Ventas totales</h6>
+                <h3 id="reporteMontoVentas" class="fw-bold text-success">
+                  $ 0.00
+                </h3>
+                <small>Ingresos registrados</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Inventario total</h6>
+                <h3 id="reporteInventarioTotal" class="fw-bold text-success">
+                  0 qq
+                </h3>
+                <small>Stock disponible</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Rendimiento</h6>
+                <h3 id="reporteRendimiento" class="fw-bold text-success">0%</h3>
+                <small>Promedio de pilado</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- GENERADOR DE REPORTES FILTRADOS -->
+        <section class="mb-4">
+          <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+              <h5 class="mb-0">Generador de reportes filtrados</h5>
+            </div>
+
+            <div class="card-body">
+              <p class="text-muted">
+                Seleccione el módulo, rango de fechas, usuario o perfil para
+                generar un reporte específico. Este reporte es solo de consulta
+                para administrador y gerente.
+              </p>
+
+              <div class="row g-3">
+                <div class="col-md-3">
+                  <label for="filtroModuloReporte" class="form-label"
+                    >Módulo</label
+                  >
+                  <select id="filtroModuloReporte" class="form-select">
+                    <option value="general">General</option>
+                    <option value="compras">Compras y báscula</option>
+                    <option value="ventas">Ventas</option>
+                    <option value="inventario">Inventario</option>
+                    <option value="produccion">Producción</option>
+                    <option value="talento-humano">Talento Humano</option>
+                    <option value="auditoria">Auditoría</option>
+                    <option value="activos">Activos</option>
+                  </select>
+                </div>
+
+                <div class="col-md-3">
+                  <label for="filtroFechaDesdeReporte" class="form-label"
+                    >Fecha desde</label
+                  >
+                  <input
+                    type="date"
+                    id="filtroFechaDesdeReporte"
+                    class="form-control"
+                  />
+                </div>
+
+                <div class="col-md-3">
+                  <label for="filtroFechaHastaReporte" class="form-label"
+                    >Fecha hasta</label
+                  >
+                  <input
+                    type="date"
+                    id="filtroFechaHastaReporte"
+                    class="form-control"
+                  />
+                </div>
+
+                <div class="col-md-3">
+                  <label for="filtroUsuarioReporte" class="form-label"
+                    >Usuario</label
+                  >
+                  <input
+                    type="text"
+                    id="filtroUsuarioReporte"
+                    class="form-control"
+                    placeholder="Todos"
+                  />
+                </div>
+
+                <div class="col-md-3">
+                  <label for="filtroPerfilReporte" class="form-label"
+                    >Perfil</label
+                  >
+                  <select id="filtroPerfilReporte" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="administrador">Administrador</option>
+                    <option value="gerente">Gerente</option>
+                    <option value="operativo">Operativo</option>
+                    <option value="usuario">Usuario</option>
+                  </select>
+                </div>
+
+                <div class="col-md-9 d-flex align-items-end gap-2 flex-wrap">
+                  <button
+                    class="btn btn-success"
+                    id="btnConsultarReporteFiltrado"
+                  >
+                    Consultar reporte
+                  </button>
+
+                  <button
+                    class="btn btn-outline-secondary"
+                    id="btnLimpiarReporteFiltrado"
+                  >
+                    Limpiar filtros
+                  </button>
+
+                  <button
+                    class="btn btn-outline-success"
+                    id="btnImprimirReporteFiltrado"
+                  >
+                    Imprimir reporte filtrado
+                  </button>
+                </div>
+              </div>
+
+              <div id="mensajeReporteFiltrado" class="mt-3"></div>
+
+              <div class="mt-4">
+                <h5 id="tituloReporteFiltrado" class="text-success fw-bold">
+                  Resultado del reporte
+                </h5>
+
+                <div class="table-responsive">
+                  <table class="table table-bordered table-hover align-middle">
+                    <thead id="tablaReporteFiltradoHead" class="table-success">
+                      <tr>
+                        <th>Seleccione un módulo y consulte el reporte</th>
+                      </tr>
+                    </thead>
+                    <tbody id="tablaReporteFiltradoBody">
+                      <tr>
+                        <td class="text-center">
+                          No se ha consultado ningún reporte filtrado.
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- GRÁFICOS -->
+        <div class="row g-4 mb-4">
+          <div class="col-md-6">
+            <div class="card shadow-sm">
+              <div class="card-body">
+                <h5 class="text-success fw-bold mb-3">
+                  Compras vs Ventas Mensuales
+                </h5>
+                <canvas id="graficoComprasVentas"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="card shadow-sm">
+              <div class="card-body">
+                <h5 class="text-success fw-bold mb-3">
+                  Producción de Arroz y Subproductos
+                </h5>
+                <canvas id="graficoProduccion"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+          <div class="col-md-6">
+            <div class="card shadow-sm">
+              <div class="card-body">
+                <h5 class="text-success fw-bold mb-3">Inventario Disponible</h5>
+                <canvas id="graficoInventario"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="card shadow-sm">
+              <div class="card-body">
+                <h5 class="text-success fw-bold mb-3">Ventas por Producto</h5>
+                <canvas id="graficoVentasProducto"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- ASISTENTE IA REAL -->
+        <div class="card shadow-sm mb-4">
+          <div class="card-body">
+            <h5 class="text-success fw-bold mb-3">
+              Asistente Inteligente Gerencial con IA Real
+            </h5>
+
+            <p class="text-muted">
+              Realice preguntas gerenciales sobre compras, báscula, inventario,
+              producción, ventas, talento humano, auditoría, activos,
+              maquinaria, transporte y reportes del ERP Piladora Don Guillo. La
+              consulta se procesa desde FastAPI y usa datos reales de
+              PostgreSQL.
+            </p>
+
+            <div class="alert alert-warning">
+              <strong>Regla:</strong>
+              La IA es solo de lectura. No modifica, elimina, actualiza ni
+              inserta datos. Solo responde sobre información del ERP arrocero
+              Piladora Don Guillo. Las respuestas importantes pueden guardarse
+              manualmente en el historial IA.
+            </div>
+
+            <label for="preguntaIA" class="form-label fw-bold">
+              Pregunta para la IA
+            </label>
+
+            <textarea
+              id="preguntaIA"
+              class="form-control"
+              rows="4"
+              maxlength="1000"
+              placeholder="Ejemplo: Analiza el inventario actual y dime qué productos necesitan atención gerencial."
+            ></textarea>
+
+            <div class="row mt-3">
+              <div class="col-md-4">
+                <label for="areaIA" class="form-label fw-bold">
+                  Área del análisis
+                </label>
+
+                <select id="areaIA" class="form-select">
+                  <option value="Gerencial">Gerencial</option>
+                  <option value="Compras y báscula">Compras y báscula</option>
+                  <option value="Inventario">Inventario</option>
+                  <option value="Producción">Producción</option>
+                  <option value="Ventas">Ventas</option>
+                  <option value="Talento humano">Talento humano</option>
+                  <option value="Auditoría">Auditoría</option>
+                  <option value="Activos y maquinaria">
+                    Activos y maquinaria
+                  </option>
+                  <option value="Transporte">Transporte</option>
+                </select>
+              </div>
+
+              <div class="col-md-4">
+                <label for="tipoAnalisisIA" class="form-label fw-bold">
+                  Tipo de análisis
+                </label>
+
+                <select id="tipoAnalisisIA" class="form-select">
+                  <option value="Recomendación gerencial">
+                    Recomendación gerencial
+                  </option>
+                  <option value="Alerta operativa">Alerta operativa</option>
+                  <option value="Análisis de riesgo">Análisis de riesgo</option>
+                  <option value="Análisis de rendimiento">
+                    Análisis de rendimiento
+                  </option>
+                  <option value="Análisis financiero">
+                    Análisis financiero
+                  </option>
+                  <option value="Control de inventario">
+                    Control de inventario
+                  </option>
+                  <option value="Auditoría y control interno">
+                    Auditoría y control interno
+                  </option>
+                </select>
+              </div>
+
+              <div class="col-md-4">
+                <label for="importanciaIA" class="form-label fw-bold">
+                  Importancia
+                </label>
+
+                <select id="importanciaIA" class="form-select">
+                  <option value="Alta">Alta</option>
+                  <option value="Media" selected>Media</option>
+                  <option value="Baja">Baja</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="mt-3">
+              <button class="btn btn-success" id="btnConsultarIA">
+                Consultar IA real
+              </button>
+
+              <button
+                class="btn btn-outline-primary ms-2"
+                id="btnGuardarHistorialIA"
+                disabled
+              >
+                Guardar en historial IA
+              </button>
+
+              <button class="btn btn-outline-secondary ms-2" id="btnLimpiarIA">
+                Limpiar
+              </button>
+
+              <button class="btn btn-outline-success ms-2" id="btnImprimirIA">
+                Imprimir reporte IA
+              </button>
+            </div>
+
+            <div id="mensajeGuardarIA" class="mt-3"></div>
+
+            <div id="resultadoIA" class="mt-4"></div>
+          </div>
+        </div>
+
+        <!-- RESUMEN GERENCIAL -->
+        <section class="mt-4">
+          <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+              <h5 class="mb-0">Resumen gerencial</h5>
+            </div>
+
+            <div class="card-body table-responsive">
+              <table class="table table-bordered table-hover align-middle">
+                <thead class="table-success">
+                  <tr>
+                    <th>Total compras</th>
+                    <th>Monto compras</th>
+                    <th>Total ventas</th>
+                    <th>Monto ventas</th>
+                    <th>Inventario total</th>
+                    <th>Empleados</th>
+                    <th>Activos</th>
+                    <th>Rendimiento promedio</th>
+                  </tr>
+                </thead>
+                <tbody id="tablaResumenGerencial">
+                  <tr>
+                    <td colspan="8" class="text-center">
+                      Cargando resumen gerencial...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- VENTAS POR PRODUCTO -->
+        <section class="mt-4">
+          <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+              <h5 class="mb-0">Ventas por producto</h5>
+            </div>
+
+            <div class="card-body table-responsive">
+              <table class="table table-bordered table-hover align-middle">
+                <thead class="table-success">
+                  <tr>
+                    <th>Producto</th>
+                    <th>Código</th>
+                    <th>Cantidad vendida</th>
+                    <th>Total vendido</th>
+                  </tr>
+                </thead>
+                <tbody id="tablaVentasProducto">
+                  <tr>
+                    <td colspan="4" class="text-center">
+                      Cargando ventas por producto...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- STOCK BAJO -->
+        <section class="mt-4">
+          <div class="card shadow-sm">
+            <div class="card-header bg-warning text-dark">
+              <h5 class="mb-0">Productos con stock bajo</h5>
+            </div>
+
+            <div class="card-body table-responsive">
+              <table class="table table-bordered table-hover align-middle">
+                <thead class="table-warning">
+                  <tr>
+                    <th>Producto</th>
+                    <th>Tipo</th>
+                    <th>Bodega</th>
+                    <th>Lote</th>
+                    <th>Cantidad disponible</th>
+                    <th>Stock mínimo</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody id="tablaStockBajo">
+                  <tr>
+                    <td colspan="7" class="text-center">
+                      Cargando stock bajo...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- HISTORIAL DE RECOMENDACIONES IA -->
+        <section class="mt-4 mb-5">
+          <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+              <h5 class="mb-0">
+                Historial de recomendaciones de inteligencia artificial
+              </h5>
+            </div>
+
+            <div class="card-body table-responsive">
+              <p class="text-muted">
+                Aquí se mostrarán las recomendaciones guardadas por la IA cuando
+                se conecte la API real.
+              </p>
+
+              <table class="table table-bordered table-hover align-middle">
+                <thead class="table-success">
+                  <tr>
+                    <th>Área</th>
+                    <th>Tipo análisis</th>
+                    <th>Recomendación</th>
+                    <th>Importancia</th>
+                    <th>Estado</th>
+                    <th>Fecha</th>
+                  </tr>
+                </thead>
+                <tbody id="tablaRecomendacionesIA">
+                  <tr>
+                    <td colspan="6" class="text-center">
+                      Cargando recomendaciones...
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- RESUMEN DE REPORTES -->
+        <div class="card shadow-sm mb-5">
+          <div class="card-body">
+            <h5 class="text-success fw-bold mb-3">Resumen de Reportes</h5>
+
+            <div class="table-responsive">
+              <table class="table table-bordered table-hover align-middle">
+                <thead class="table-success">
+                  <tr>
+                    <th>Reporte</th>
+                    <th>Descripción</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>Reporte de compras</td>
+                    <td>Control de arroz en cáscara comprado por mes.</td>
+                    <td><span class="badge bg-success">Disponible</span></td>
+                  </tr>
+                  <tr>
+                    <td>Reporte de ventas</td>
+                    <td>Ventas de arroz pilado y subproductos.</td>
+                    <td><span class="badge bg-success">Disponible</span></td>
+                  </tr>
+                  <tr>
+                    <td>Reporte de inventario</td>
+                    <td>Stock disponible, stock bajo y productos agotados.</td>
+                    <td><span class="badge bg-success">Disponible</span></td>
+                  </tr>
+                  <tr>
+                    <td>Reporte de producción</td>
+                    <td>
+                      Órdenes de pilado, rendimiento, merma y subproductos.
+                    </td>
+                    <td><span class="badge bg-success">Disponible</span></td>
+                  </tr>
+                  <tr>
+                    <td>Reporte de talento humano</td>
+                    <td>Empleados, asistencia, sueldos y roles de pago.</td>
+                    <td><span class="badge bg-success">Disponible</span></td>
+                  </tr>
+                  <tr>
+                    <td>Reporte de auditoría</td>
+                    <td>
+                      Acciones realizadas por usuarios, módulos y perfiles.
+                    </td>
+                    <td><span class="badge bg-success">Disponible</span></td>
+                  </tr>
+                  <tr>
+                    <td>Análisis con IA</td>
+                    <td>
+                      Recomendaciones automáticas para toma de decisiones.
+                    </td>
+                    <td>
+                      <span class="badge bg-warning text-dark">Prototipo</span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/permisos.js"></script>
+    <script src="js/reportes.js?v=4"></script>
+  </body>
+</html>

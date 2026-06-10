@@ -1,0 +1,708 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Auditoría - ERP Piladora Don Guillo</title>
+
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+
+    <style>
+      .auditoria-card {
+        border: 0;
+        border-left: 5px solid #198754;
+        border-radius: 10px;
+      }
+
+      .auditoria-card.critica {
+        border-left-color: #dc3545;
+      }
+
+      .auditoria-card.denegada {
+        border-left-color: #0d6efd;
+      }
+
+      .auditoria-card.ultimo {
+        border-left-color: #6f42c1;
+      }
+
+      .auditoria-card.historico {
+        border-left-color: #fd7e14;
+      }
+
+      .badge-perfil,
+      .badge-modulo,
+      .badge-accion {
+        display: inline-block;
+        padding: 0.35rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        white-space: nowrap;
+      }
+
+      .perfil-administrador {
+        background: #d1e7dd;
+        color: #0f5132;
+      }
+
+      .perfil-gerente {
+        background: #cfe2ff;
+        color: #084298;
+      }
+
+      .perfil-compras {
+        background: #fff3cd;
+        color: #664d03;
+      }
+
+      .perfil-ventas {
+        background: #e2d9f3;
+        color: #3d0a91;
+      }
+
+      .perfil-inventario {
+        background: #cff4fc;
+        color: #055160;
+      }
+
+      .perfil-default {
+        background: #e9ecef;
+        color: #343a40;
+      }
+
+      .modulo-login {
+        background: #d1e7dd;
+        color: #0f5132;
+      }
+
+      .modulo-panel {
+        background: #e9ecef;
+        color: #343a40;
+      }
+
+      .modulo-compras {
+        background: #fff3cd;
+        color: #664d03;
+      }
+
+      .modulo-inventario {
+        background: #cff4fc;
+        color: #055160;
+      }
+
+      .modulo-produccion {
+        background: #f8d7da;
+        color: #842029;
+      }
+
+      .modulo-ventas {
+        background: #e2d9f3;
+        color: #3d0a91;
+      }
+
+      .modulo-talento {
+        background: #fff3cd;
+        color: #664d03;
+      }
+
+      .modulo-seguridad {
+        background: #f8d7da;
+        color: #842029;
+      }
+
+      .modulo-auditoria {
+        background: #d1e7dd;
+        color: #0f5132;
+      }
+
+      .modulo-reportes {
+        background: #cff4fc;
+        color: #055160;
+      }
+
+      .modulo-activos {
+        background: #e9ecef;
+        color: #343a40;
+      }
+
+      .modulo-default {
+        background: #e9ecef;
+        color: #343a40;
+      }
+
+      .accion-login {
+        background: #198754;
+        color: #fff;
+      }
+
+      .accion-logout {
+        background: #6c757d;
+        color: #fff;
+      }
+
+      .accion-modulo {
+        background: #0dcaf0;
+        color: #000;
+      }
+
+      .accion-consultar {
+        background: #cfe2ff;
+        color: #084298;
+      }
+
+      .accion-crear {
+        background: #146c43;
+        color: #fff;
+      }
+
+      .accion-editar {
+        background: #ffc107;
+        color: #000;
+      }
+
+      .accion-eliminar {
+        background: #dc3545;
+        color: #fff;
+      }
+
+      .accion-anular {
+        background: #fd7e14;
+        color: #000;
+      }
+
+      .accion-denegado {
+        background: #0d6efd;
+        color: #fff;
+      }
+
+      .accion-reporte {
+        background: #6f42c1;
+        color: #fff;
+      }
+
+      .accion-error {
+        background: #842029;
+        color: #fff;
+      }
+
+      .accion-default {
+        background: #6c757d;
+        color: #fff;
+      }
+
+      .fila-critica td {
+        background: #fff5f5 !important;
+      }
+
+      .fila-denegada td {
+        background: #f2f7ff !important;
+      }
+
+      .fila-activa td {
+        background: #f6fff9 !important;
+      }
+
+      .tabla-auditoria th,
+      .tabla-auditoria td {
+        font-size: 0.86rem;
+        vertical-align: middle;
+      }
+
+      .toolbar-auditoria {
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+
+      .texto-pequeno {
+        font-size: 0.82rem;
+      }
+
+      .mantenimiento-box {
+        border: 1px solid #dee2e6;
+        border-left: 5px solid #198754;
+        border-radius: 10px;
+        padding: 15px;
+        background: #fff;
+        height: 100%;
+      }
+
+      .mantenimiento-box.warning {
+        border-left-color: #fd7e14;
+      }
+
+      .mantenimiento-box.danger {
+        border-left-color: #dc3545;
+      }
+
+      .resumen-mantenimiento-item {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 10px;
+        border: 1px solid #e9ecef;
+      }
+
+      .resumen-mantenimiento-item strong {
+        display: block;
+        font-size: 1.25rem;
+        color: #198754;
+      }
+
+      .paginacion-auditoria {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-top: 10px;
+      }
+
+      .paginacion-auditoria small {
+        color: #6c757d;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="d-flex">
+      <aside class="sidebar">
+        <h4 class="text-white fw-bold text-center mb-4">Don Guillo</h4>
+
+        <a href="dashboard.html" class="sidebar-link">Panel principal</a>
+        <a href="compras.html" class="sidebar-link">Compras y báscula</a>
+        <a href="inventario.html" class="sidebar-link">Inventario</a>
+        <a href="produccion.html" class="sidebar-link">Producción</a>
+        <a href="ventas.html" class="sidebar-link">Ventas</a>
+        <a href="talento_humano.html" class="sidebar-link">Talento Humano</a>
+        <a href="auditoria.html" class="sidebar-link active" id="linkAuditoria">Auditoría</a>
+        <a href="seguridad.html" class="sidebar-link">Seguridad y Usuarios</a>
+        <a href="reportes.html" class="sidebar-link">Reportes e IA</a>
+        <a href="activos.html" class="sidebar-link">Activos</a>
+
+        <button class="btn btn-light w-100 mt-4" onclick="cerrarSesion()">
+          Cerrar sesión
+        </button>
+      </aside>
+
+      <main class="content">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <div>
+            <h2 class="fw-bold text-success">Auditoría del Sistema</h2>
+            <p class="text-muted mb-0">
+              Consulta de accesos, sesiones, acciones, intentos denegados y operaciones realizadas en el ERP.
+            </p>
+          </div>
+
+          <div class="text-end">
+            <strong id="usuarioActual">Usuario</strong><br />
+            <small id="perfilActual" class="text-muted">Perfil</small>
+          </div>
+        </div>
+
+        <div class="alert alert-warning shadow-sm" role="alert">
+          <strong>Importante:</strong>
+          este módulo es de consulta y control. La auditoría no debe borrarse diariamente; primero se filtra,
+          se genera comprobante y solo después se puede archivar información antigua desde mantenimiento.
+        </div>
+
+        <div class="row g-4 mb-4">
+          <div class="col-md-2">
+            <div class="card auditoria-card shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Conectados</h6>
+                <h3 class="fw-bold text-success" id="usuariosConectados">0</h3>
+                <small>Sesiones activas</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-2">
+            <div class="card auditoria-card shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Ingresos</h6>
+                <h3 class="fw-bold text-success" id="ingresosRegistrados">0</h3>
+                <small>Accesos cargados</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-2">
+            <div class="card auditoria-card shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Acciones</h6>
+                <h3 class="fw-bold text-success" id="accionesRegistradas">0</h3>
+                <small>Operaciones cargadas</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-2">
+            <div class="card auditoria-card denegada shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Denegados</h6>
+                <h3 class="fw-bold text-primary" id="accesosDenegados">0</h3>
+                <small>Intentos sin permiso</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-2">
+            <div class="card auditoria-card critica shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Críticas</h6>
+                <h3 class="fw-bold text-danger" id="accionesCriticas">0</h3>
+                <small>Eliminar/anular/editar</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-2">
+            <div class="card auditoria-card ultimo shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Último acceso</h6>
+                <h3 class="fw-bold text-success fs-5" id="ultimoAcceso">Sin datos</h3>
+                <small>Sesión más reciente</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Filtros de auditoría</h5>
+            <small id="estadoCargaAuditoria">Listo para consultar</small>
+          </div>
+
+          <div class="card-body">
+            <div class="row g-3">
+              <div class="col-md-3">
+                <label class="form-label">Usuario</label>
+                <input type="text" class="form-control" id="filtroUsuario" placeholder="Buscar usuario" />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Perfil</label>
+                <select class="form-select" id="filtroPerfil">
+                  <option value="">Todos</option>
+                  <option value="Administrador">Administrador</option>
+                  <option value="Gerente">Gerente</option>
+                  <option value="Operador de Compras y Báscula">Operador de Compras y Báscula</option>
+                  <option value="Operador de Ventas">Operador de Ventas</option>
+                  <option value="Operador de Inventario">Operador de Inventario</option>
+                  <option value="Operativo">Operativo</option>
+                </select>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Módulo</label>
+                <select class="form-select" id="filtroModulo">
+                  <option value="">Todos</option>
+                  <option value="Login">Login</option>
+                  <option value="Panel principal">Panel principal</option>
+                  <option value="Compras y báscula">Compras y báscula</option>
+                  <option value="Inventario">Inventario</option>
+                  <option value="Producción">Producción</option>
+                  <option value="Ventas">Ventas</option>
+                  <option value="Talento Humano">Talento Humano</option>
+                  <option value="Activos">Activos</option>
+                  <option value="Auditoría">Auditoría</option>
+                  <option value="Seguridad y Usuarios">Seguridad y Usuarios</option>
+                  <option value="Reportes e IA">Reportes e IA</option>
+                </select>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Acción</label>
+                <select class="form-select" id="filtroAccion">
+                  <option value="">Todas</option>
+                  <option value="LOGIN">LOGIN - Inicio de sesión</option>
+                  <option value="LOGOUT">LOGOUT - Cierre de sesión</option>
+                  <option value="INGRESO_MODULO">INGRESO_MODULO - Ingreso a módulo</option>
+                  <option value="ACCESO_DENEGADO">ACCESO_DENEGADO - Sin permiso</option>
+                  <option value="CONSULTAR">CONSULTAR</option>
+                  <option value="CREAR">CREAR</option>
+                  <option value="EDITAR">EDITAR</option>
+                  <option value="ELIMINAR">ELIMINAR</option>
+                  <option value="ELIMINAR_LOGICO">ELIMINAR_LOGICO</option>
+                  <option value="ANULAR">ANULAR</option>
+                  <option value="ACTIVAR">ACTIVAR</option>
+                  <option value="INACTIVAR">INACTIVAR</option>
+                  <option value="SUSPENDER">SUSPENDER</option>
+                  <option value="GENERAR_REPORTE">GENERAR_REPORTE</option>
+                  <option value="ARCHIVAR_AUDITORIA">ARCHIVAR_AUDITORIA</option>
+                </select>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Fecha desde</label>
+                <input type="date" class="form-control" id="filtroFechaDesde" />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Fecha hasta</label>
+                <input type="date" class="form-control" id="filtroFechaHasta" />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Estado sesión</label>
+                <select class="form-select" id="filtroEstadoSesion">
+                  <option value="">Todos</option>
+                  <option value="Activa">Activa</option>
+                  <option value="Cerrada">Cerrada</option>
+                </select>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Registros por página</label>
+                <select class="form-select" id="limiteRegistrosAuditoria">
+                  <option value="50" selected>Últimos 50</option>
+                  <option value="100">Últimos 100</option>
+                  <option value="200">Últimos 200</option>
+                  <option value="500">Últimos 500</option>
+                </select>
+              </div>
+
+              <div class="col-md-12 d-flex align-items-end toolbar-auditoria">
+                <button type="button" class="btn btn-success" id="btnAplicarFiltros">Aplicar</button>
+                <button type="button" class="btn btn-secondary" id="btnLimpiarFiltros">Limpiar</button>
+                <button type="button" class="btn btn-outline-success" id="btnGenerarComprobante">Comprobante</button>
+                <button type="button" class="btn btn-outline-primary" id="btnRecargarAuditoria">Recargar</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <section class="mb-4">
+          <div class="card shadow-sm">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+              <h5 class="mb-0">Historial de accesos al sistema</h5>
+              <small id="contadorAccesos">0 registros</small>
+            </div>
+
+            <div class="card-body table-responsive">
+              <table class="table table-bordered table-hover align-middle tabla-auditoria">
+                <thead class="table-success">
+                  <tr>
+                    <th>ID</th>
+                    <th>Usuario</th>
+                    <th>Perfil</th>
+                    <th>Fecha ingreso</th>
+                    <th>Hora ingreso</th>
+                    <th>Fecha salida</th>
+                    <th>Hora salida</th>
+                    <th>Tiempo conectado</th>
+                    <th>IP equipo</th>
+                    <th>Estado sesión</th>
+                  </tr>
+                </thead>
+
+                <tbody id="tablaAuditoriaAccesos">
+                  <tr>
+                    <td colspan="10" class="text-center text-muted">Cargando accesos...</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="paginacion-auditoria">
+                <div>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" id="btnAnteriorAccesos">
+                    Anterior
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" id="btnSiguienteAccesos">
+                    Siguiente
+                  </button>
+                </div>
+
+                <small id="paginaAccesosTexto">
+                  Página de accesos: 1
+                </small>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="mb-4">
+          <div class="card shadow-sm">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+              <h5 class="mb-0">Acciones registradas en el sistema</h5>
+              <small id="contadorAcciones">0 registros</small>
+            </div>
+
+            <div class="card-body table-responsive">
+              <table class="table table-bordered table-hover align-middle tabla-auditoria">
+                <thead class="table-success">
+                  <tr>
+                    <th>ID</th>
+                    <th>Usuario</th>
+                    <th>Perfil</th>
+                    <th>Módulo</th>
+                    <th>Acción</th>
+                    <th>Descripción</th>
+                    <th>Tabla afectada</th>
+                    <th>ID registro</th>
+                    <th>Fecha</th>
+                    <th>Hora</th>
+                  </tr>
+                </thead>
+
+                <tbody id="tablaAuditoriaAcciones">
+                  <tr>
+                    <td colspan="10" class="text-center text-muted">Cargando acciones...</td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div class="paginacion-auditoria">
+                <div>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" id="btnAnteriorAcciones">
+                    Anterior
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" id="btnSiguienteAcciones">
+                    Siguiente
+                  </button>
+                </div>
+
+                <small id="paginaAccionesTexto">
+                  Página de acciones: 1
+                </small>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="mb-4" id="seccionMantenimientoAuditoria">
+          <div class="card shadow-sm">
+            <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+              <h5 class="mb-0">Mantenimiento de auditoría</h5>
+              <small>Solo para control administrativo</small>
+            </div>
+
+            <div class="card-body">
+              <div class="alert alert-info texto-pequeno mb-4">
+                Esta sección no borra evidencia directamente. Primero cierra sesiones antiguas que quedaron abiertas
+                y luego permite archivar registros antiguos en tablas históricas para que la auditoría principal no se vuelva pesada.
+              </div>
+
+              <div class="row g-3 mb-4" id="resumenMantenimientoAuditoria">
+                <div class="col-md-2">
+                  <div class="resumen-mantenimiento-item">
+                    <span>Accesos actuales</span>
+                    <strong id="mantAccesosActuales">0</strong>
+                  </div>
+                </div>
+
+                <div class="col-md-2">
+                  <div class="resumen-mantenimiento-item">
+                    <span>Acciones actuales</span>
+                    <strong id="mantAccionesActuales">0</strong>
+                  </div>
+                </div>
+
+                <div class="col-md-2">
+                  <div class="resumen-mantenimiento-item">
+                    <span>Accesos históricos</span>
+                    <strong id="mantAccesosHistoricos">0</strong>
+                  </div>
+                </div>
+
+                <div class="col-md-2">
+                  <div class="resumen-mantenimiento-item">
+                    <span>Acciones históricas</span>
+                    <strong id="mantAccionesHistoricas">0</strong>
+                  </div>
+                </div>
+
+                <div class="col-md-2">
+                  <div class="resumen-mantenimiento-item">
+                    <span>Sesiones activas</span>
+                    <strong id="mantSesionesActivas">0</strong>
+                  </div>
+                </div>
+
+                <div class="col-md-2">
+                  <div class="resumen-mantenimiento-item">
+                    <span>Activas antiguas</span>
+                    <strong id="mantSesionesAntiguas">0</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div class="row g-3">
+                <div class="col-md-6">
+                  <div class="mantenimiento-box warning">
+                    <h6 class="fw-bold text-success">Cerrar sesiones activas antiguas</h6>
+                    <p class="texto-pequeno text-muted">
+                      Cierra sesiones que quedaron abiertas por pruebas, cierre del navegador o ingreso sin logout.
+                      No elimina registros, solo completa fecha de salida, hora de salida y tiempo conectado.
+                    </p>
+
+                    <label class="form-label">Cerrar sesiones activas mayores a:</label>
+                    <div class="input-group mb-3">
+                      <input
+                        type="number"
+                        class="form-control"
+                        id="horasCerrarSesionesAntiguas"
+                        value="12"
+                        min="1"
+                      />
+                      <span class="input-group-text">horas</span>
+                    </div>
+
+                    <button type="button" class="btn btn-warning" id="btnCerrarSesionesAntiguas">
+                      Cerrar sesiones antiguas
+                    </button>
+                  </div>
+                </div>
+
+                <div class="col-md-6">
+                  <div class="mantenimiento-box">
+                    <h6 class="fw-bold text-success">Archivar auditoría antigua</h6>
+                    <p class="texto-pequeno text-muted">
+                      Mueve accesos cerrados y acciones antiguas a tablas históricas. Esto mantiene rápida la auditoría
+                      principal sin perder evidencia.
+                    </p>
+
+                    <label class="form-label">Archivar registros mayores a:</label>
+                    <div class="input-group mb-3">
+                      <input
+                        type="number"
+                        class="form-control"
+                        id="diasArchivarAuditoria"
+                        value="30"
+                        min="1"
+                      />
+                      <span class="input-group-text">días</span>
+                    </div>
+
+                    <button type="button" class="btn btn-success" id="btnArchivarAuditoria">
+                      Archivar auditoría antigua
+                    </button>
+                  </div>
+                </div>
+
+                <div class="col-md-12 d-flex gap-2">
+                  <button type="button" class="btn btn-outline-primary" id="btnActualizarResumenMantenimiento">
+                    Actualizar resumen de mantenimiento
+                  </button>
+
+                  <small class="text-muted align-self-center" id="mensajeMantenimientoAuditoria">
+                    Mantenimiento listo.
+                  </small>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/permisos.js"></script>
+    <script src="js/auditoria.js"></script>
+  </body>
+</html>

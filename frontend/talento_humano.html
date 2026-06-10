@@ -1,0 +1,523 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Talento Humano - ERP Piladora Don Guillo</title>
+
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="css/style.css" />
+  </head>
+
+  <body>
+    <div class="d-flex">
+      <aside class="sidebar">
+        <h4 class="text-white fw-bold text-center mb-4">Don Guillo</h4>
+
+        <a href="dashboard.html" class="sidebar-link">Panel principal</a>
+        <a href="compras.html" class="sidebar-link">Compras y báscula</a>
+        <a href="inventario.html" class="sidebar-link">Inventario</a>
+        <a href="produccion.html" class="sidebar-link">Producción</a>
+        <a href="ventas.html" class="sidebar-link">Ventas</a>
+        <a href="talento_humano.html" class="sidebar-link active">Talento Humano</a>
+        <a href="auditoria.html" class="sidebar-link">Auditoría</a>
+        <a href="seguridad.html" class="sidebar-link">Seguridad y Usuarios</a>
+        <a href="activos.html" class="sidebar-link">Activos</a>
+        <a href="reportes.html" class="sidebar-link">Reportes e IA</a>
+
+        <button class="btn btn-light w-100 mt-4" onclick="cerrarSesion()">
+          Cerrar sesión
+        </button>
+      </aside>
+
+      <main class="content">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+          <div>
+            <h2 class="fw-bold text-success">Talento Humano</h2>
+            <p class="text-muted mb-0">
+              Gestión de empleados, asistencia, roles de pago y comprobantes.
+            </p>
+          </div>
+
+          <div class="text-end">
+            <strong id="usuarioActual">Usuario</strong><br />
+            <small id="perfilActual" class="text-muted">Perfil</small>
+          </div>
+        </div>
+
+        <div class="row g-4 mb-4">
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Total empleados</h6>
+                <h3 class="fw-bold text-success" id="totalEmpleados">0</h3>
+                <small>Registrados en el sistema</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Activos</h6>
+                <h3 class="fw-bold text-success" id="empleadosActivos">0</h3>
+                <small>Disponibles para módulos</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Inactivos / Suspendidos</h6>
+                <h3 class="fw-bold text-warning" id="empleadosNoActivos">0</h3>
+                <small>No disponibles para operaciones</small>
+              </div>
+            </div>
+          </div>
+
+          <div class="col-md-3">
+            <div class="card dashboard-card shadow-sm">
+              <div class="card-body">
+                <h6 class="text-muted">Total mensual en sueldos</h6>
+                <h3 class="fw-bold text-success" id="totalMensualSueldos">
+                  $ 0.00
+                </h3>
+                <small>Solo empleados activos</small>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h5 class="text-success fw-bold mb-0" id="tituloFormularioEmpleado">
+                Registrar empleado
+              </h5>
+
+              <button
+                type="button"
+                class="btn btn-outline-secondary btn-sm"
+                id="btnCancelarEdicionEmpleado"
+                style="display: none"
+              >
+                Cancelar edición
+              </button>
+            </div>
+
+            <form id="formTalentoHumano" class="row g-3">
+              <input type="hidden" id="idEmpleadoEditar" />
+
+              <div class="col-md-3">
+                <label class="form-label">Cédula</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="cedulaEmpleado"
+                  maxlength="10"
+                  minlength="10"
+                  pattern="^\d{10}$"
+                  title="Debe ingresar exactamente 10 dígitos (solo números)"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Nombres</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="nombresEmpleado"
+                  pattern="^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$"
+                  title="Solo se permiten letras y espacios"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Apellidos</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="apellidosEmpleado"
+                  pattern="^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$"
+                  title="Solo se permiten letras y espacios"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Teléfono</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="telefonoEmpleado"
+                  maxlength="10"
+                  minlength="10"
+                  pattern="^09\d{8}$"
+                  title="Debe empezar con 09 y tener 10 dígitos en total"
+                  required
+                />
+              </div>
+
+              <div class="col-md-6">
+                <label class="form-label">Dirección</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="direccionEmpleado"
+                  maxlength="150"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Cargo</label>
+                <select class="form-select" id="cargoEmpleado" required>
+                  <option value="">Seleccione</option>
+                  <option value="Operador de báscula">Operador de báscula</option>
+                  <option value="Operador de piladora">Operador de piladora</option>
+                  <option value="Supervisor de Producción">Supervisor de Producción</option>
+                  <option value="Bodeguero">Bodeguero</option>
+                  <option value="Vendedor">Vendedor</option>
+                  <option value="Chofer">Chofer</option>
+                  <option value="Administrador">Administrador</option>
+                  <option value="Personal de campo">Personal de campo</option>
+                  <option value="Guardia">Guardia</option>
+                </select>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Área</label>
+                <select class="form-select" id="areaEmpleado" required>
+                  <option value="">Seleccione</option>
+                  <option value="Báscula y compras">Báscula y compras</option>
+                  <option value="Producción">Producción</option>
+                  <option value="Bodega">Bodega</option>
+                  <option value="Ventas">Ventas</option>
+                  <option value="Administración">Administración</option>
+                  <option value="Campo">Campo</option>
+                  <option value="Seguridad">Seguridad</option>
+                </select>
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Sueldo base</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control"
+                  id="sueldoEmpleado"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Fecha de ingreso</label>
+                <input
+                  type="date"
+                  class="form-control"
+                  id="fechaIngresoEmpleado"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Estado</label>
+                <select class="form-select" id="estadoEmpleado" required>
+                  <option value="">Seleccione</option>
+                  <option value="Activo">Activo</option>
+                  <option value="Inactivo">Inactivo</option>
+                  <option value="Suspendido">Suspendido</option>
+                </select>
+              </div>
+
+              <div class="col-md-12">
+                <button
+                  type="submit"
+                  class="btn btn-success"
+                  id="btnGuardarEmpleado"
+                >
+                  Registrar empleado
+                </button>
+                <button
+                  type="reset"
+                  class="btn btn-secondary"
+                  id="btnLimpiarEmpleado"
+                >
+                  Limpiar
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Empleados registrados</h5>
+          </div>
+
+          <div class="card-body table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+              <thead class="table-success">
+                <tr>
+                  <th>ID</th>
+                  <th>Cédula</th>
+                  <th>Empleado</th>
+                  <th>Teléfono</th>
+                  <th>Cargo</th>
+                  <th>Área</th>
+                  <th>Sueldo</th>
+                  <th>Fecha ingreso</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody id="tablaEmpleados">
+                <tr>
+                  <td colspan="10" class="text-center">
+                    Cargando empleados...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <section class="mt-4 mb-4">
+          <div class="card shadow-sm">
+            <div class="card-header bg-success text-white">
+              <h5 class="mb-0">Asistencia manual de empleados</h5>
+            </div>
+
+            <div class="card-body">
+              <p class="text-muted">
+                Registro manual de entrada y salida mientras no exista sensor biométrico.
+                Las horas extras y sanciones registradas aquí se usarán automáticamente
+                para generar el rol de pago.
+              </p>
+
+              <form id="formMarcarEntrada" class="row g-3 mb-4">
+                <div class="col-md-3">
+                  <label class="form-label">Empleado</label>
+                  <select class="form-select" id="empleadoAsistencia" required>
+                    <option value="">Seleccione empleado activo</option>
+                  </select>
+                </div>
+
+                <div class="col-md-2">
+                  <label class="form-label">Fecha</label>
+                  <input
+                    type="date"
+                    class="form-control"
+                    id="fechaAsistencia"
+                    required
+                  />
+                </div>
+
+                <div class="col-md-2">
+                  <label class="form-label">Hora programada</label>
+                  <input
+                    type="time"
+                    class="form-control"
+                    id="horaProgramadaEntrada"
+                    value="08:00"
+                    required
+                  />
+                </div>
+
+                <div class="col-md-2">
+                  <label class="form-label">Hora entrada</label>
+                  <input
+                    type="time"
+                    class="form-control"
+                    id="horaEntradaAsistencia"
+                    required
+                  />
+                </div>
+
+                <div class="col-md-2">
+                  <label class="form-label">Sanción ($)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    class="form-control"
+                    id="sancionAsistencia"
+                    value="0"
+                  />
+                </div>
+
+                <div class="col-md-8">
+                  <label class="form-label">Observación</label>
+                  <input
+                    type="text"
+                    class="form-control"
+                    id="observacionAsistencia"
+                    maxlength="150"
+                    placeholder="Ejemplo: Llegó tarde 15 minutos"
+                  />
+                </div>
+
+                <div class="col-md-4 d-flex align-items-end">
+                  <button type="submit" class="btn btn-success w-100">
+                    Marcar entrada
+                  </button>
+                </div>
+              </form>
+
+              <div class="table-responsive">
+                <table class="table table-bordered table-hover align-middle">
+                  <thead class="table-success">
+                    <tr>
+                      <th>ID</th>
+                      <th>Empleado</th>
+                      <th>Cargo</th>
+                      <th>Área</th>
+                      <th>Fecha</th>
+                      <th>Entrada</th>
+                      <th>Salida</th>
+                      <th>Estado</th>
+                      <th>Atraso</th>
+                      <th>Sanción</th>
+                      <th>Horas trabajadas</th>
+                      <th>Horas extras</th>
+                      <th>Acción</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tablaAsistencia">
+                    <tr>
+                      <td colspan="13" class="text-center">
+                        Cargando asistencia...
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Generar rol de pago</h5>
+          </div>
+
+          <div class="card-body">
+            <p class="text-muted">
+              El rol de pago se genera automáticamente usando el sueldo del empleado,
+              las horas extras y sanciones registradas en asistencia. Las bonificaciones
+              y descuentos adicionales se ingresan manualmente si aplican.
+            </p>
+
+            <form id="formRolPago" class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label">Empleado</label>
+                <select class="form-select" id="empleadoRolPago" required>
+                  <option value="">Seleccione empleado activo</option>
+                </select>
+              </div>
+
+              <div class="col-md-2">
+                <label class="form-label">Periodo</label>
+                <input
+                  type="month"
+                  class="form-control"
+                  id="periodoRolPago"
+                  required
+                />
+              </div>
+
+              <input type="hidden" id="horasExtrasRolPago" value="0" />
+              <input type="hidden" id="sancionesRolPago" value="0" />
+
+              <div class="col-md-2">
+                <label class="form-label">Bonificaciones</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control"
+                  id="bonificacionesRolPago"
+                  value="0"
+                />
+              </div>
+
+              <div class="col-md-2">
+                <label class="form-label">Descuentos</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control"
+                  id="descuentosRolPago"
+                  value="0"
+                />
+              </div>
+
+              <div class="col-md-12">
+                <label class="form-label">Observación</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="observacionRolPago"
+                  maxlength="150"
+                  placeholder="Ejemplo: Rol generado automáticamente desde Talento Humano"
+                />
+              </div>
+
+              <div class="col-md-12">
+                <button type="submit" class="btn btn-success">
+                  Generar rol de pago
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Roles de pago archivados</h5>
+          </div>
+
+          <div class="card-body table-responsive">
+            <table class="table table-bordered table-hover align-middle">
+              <thead class="table-success">
+                <tr>
+                  <th>ID</th>
+                  <th>Empleado</th>
+                  <th>Periodo</th>
+                  <th>Sueldo base</th>
+                  <th>Horas extras</th>
+                  <th>Bonificaciones</th>
+                  <th>Sanciones</th>
+                  <th>Descuentos</th>
+                  <th>Total a pagar</th>
+                  <th>Fecha generación</th>
+                  <th>Comprobante</th>
+                </tr>
+              </thead>
+              <tbody id="tablaRolesPago">
+                <tr>
+                  <td colspan="11" class="text-center">
+                    Cargando roles de pago...
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script src="js/api.js"></script>
+    <script src="js/main.js"></script>
+    <script src="js/permisos.js"></script>
+    <script src="js/talento_humano.js"></script>
+  </body>
+</html>
