@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from pydantic import BaseModel
@@ -22,7 +22,7 @@ class AccesoCreate(BaseModel):
     id_usuario: int
     fecha_ingreso: Optional[date] = None
     hora_ingreso: Optional[time] = None
-    ip_equipo: Optional[str] = "127.0.0.1"
+    ip_equipo: Optional[str] = None
     estado_sesion: str = "Activa"
 
 
@@ -73,6 +73,66 @@ def normalizar_estado_sesion(estado: str) -> str:
         return "Cerrada"
 
     return "Activa"
+
+
+def limpiar_valor_ip(valor: Optional[str]) -> Optional[str]:
+    """
+    Limpia valores recibidos desde headers de proxy.
+    Evita guardar valores vacíos, desconocidos o demasiado largos.
+    La columna ip_equipo ya fue ampliada a VARCHAR(100).
+    """
+    if valor is None:
+        return None
+
+    valor_limpio = valor.strip()
+
+    if not valor_limpio:
+        return None
+
+    if valor_limpio.lower() in ["unknown", "null", "none", "undefined"]:
+        return None
+
+    return valor_limpio[:100]
+
+
+def obtener_ip_cliente(request: Request) -> str:
+    """
+    Obtiene la IP real del cliente desde FastAPI.
+
+    En producción, Render trabaja detrás de proxy, por eso se revisan primero
+    los headers más comunes:
+
+    1. cf-connecting-ip
+    2. x-forwarded-for
+    3. x-real-ip
+    4. request.client.host
+    5. 127.0.0.1 como respaldo final
+
+    No se depende del frontend para conocer la IP real.
+    """
+
+    cf_ip = limpiar_valor_ip(request.headers.get("cf-connecting-ip"))
+    if cf_ip:
+        return cf_ip
+
+    forwarded_for = request.headers.get("x-forwarded-for")
+    if forwarded_for:
+        ips = forwarded_for.split(",")
+        for ip in ips:
+            ip_limpia = limpiar_valor_ip(ip)
+            if ip_limpia:
+                return ip_limpia
+
+    real_ip = limpiar_valor_ip(request.headers.get("x-real-ip"))
+    if real_ip:
+        return real_ip
+
+    if request.client and request.client.host:
+        ip_cliente = limpiar_valor_ip(request.client.host)
+        if ip_cliente:
+            return ip_cliente
+
+    return "127.0.0.1"
 
 
 def validar_usuario_activo(id_usuario: int, db: Session):
@@ -470,7 +530,11 @@ def resumen_mantenimiento_auditoria(db: Session = Depends(get_db)):
 # =====================================================
 
 @router.post("/accesos")
-def registrar_acceso(acceso: AccesoCreate, db: Session = Depends(get_db)):
+def registrar_acceso(
+    acceso: AccesoCreate,
+    request: Request,
+    db: Session = Depends(get_db)
+):
     try:
         validar_usuario_activo(acceso.id_usuario, db)
 
@@ -479,6 +543,8 @@ def registrar_acceso(acceso: AccesoCreate, db: Session = Depends(get_db)):
         ahora = datetime.now()
         fecha_ingreso = acceso.fecha_ingreso or ahora.date()
         hora_ingreso = acceso.hora_ingreso or ahora.time().replace(microsecond=0)
+
+        ip_cliente = obtener_ip_cliente(request)
 
         cerrar_sesiones_activas_usuario(acceso.id_usuario, db)
 
@@ -506,7 +572,7 @@ def registrar_acceso(acceso: AccesoCreate, db: Session = Depends(get_db)):
                 "id_usuario": acceso.id_usuario,
                 "fecha_ingreso": fecha_ingreso,
                 "hora_ingreso": hora_ingreso,
-                "ip_equipo": acceso.ip_equipo or "127.0.0.1",
+                "ip_equipo": ip_cliente,
                 "estado_sesion": estado_sesion
             }
         )
@@ -518,7 +584,8 @@ def registrar_acceso(acceso: AccesoCreate, db: Session = Depends(get_db)):
         return {
             "mensaje": "Acceso registrado correctamente",
             "id_acceso": nuevo_acceso["id_acceso"],
-            "estado_sesion": estado_sesion
+            "estado_sesion": estado_sesion,
+            "ip_equipo": ip_cliente
         }
 
     except HTTPException:
