@@ -1427,7 +1427,7 @@ async function consultarIAReal() {
   }
 
   try {
-    const respuesta = await fetch("http://127.0.0.1:8000/api/ia/consultar", {
+    const respuesta = await fetch("https://erp-piladora-don-guillo.onrender.com/api/ia/consultar", {
       method: "POST",
       headers: {
         "Content-Type": "application/json"
