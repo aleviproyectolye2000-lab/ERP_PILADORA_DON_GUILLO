@@ -1,4 +1,4 @@
-console.log("REPORTES.JS NUEVO CARGADO - VERSION 4");
+console.log("REPORTES.JS NUEVO CARGADO - VERSION 5");
 
 /* ---------------------------------------------------- */
 /* MÓDULO REPORTES E INTELIGENCIA ARTIFICIAL            */
