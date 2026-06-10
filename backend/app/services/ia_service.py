@@ -1,9 +1,6 @@
 import os
 import json
 import time as time_module
-import socket
-import urllib.request
-import urllib.error
 from datetime import date, datetime, time
 from decimal import Decimal
 
@@ -14,9 +11,23 @@ from openai import OpenAI
 
 load_dotenv()
 
-IA_PROVIDER = os.getenv("IA_PROVIDER", "gemini").lower().strip()
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
-GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip()
+# =====================================================
+# CONFIGURACIÓN OFICIAL DE IA
+# =====================================================
+# Este archivo queda configurado SOLO para OpenAI.
+# Se deja OpenAI como proveedor único de inteligencia artificial.
+#
+# Variables recomendadas en el archivo .env:
+# OPENAI_API_KEY=pega_aqui_tu_clave_real_de_openai
+# OPENAI_MODEL=gpt-4o-mini
+# IA_MAX_REGISTROS=20
+# OPENAI_TIMEOUT_SEGUNDOS=45
+# OPENAI_MAX_REINTENTOS=1
+# OPENAI_MAX_TOKENS=1200
+# =====================================================
+
+IA_PROVIDER = "openai"
+
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
 OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini").strip()
 
@@ -32,11 +43,9 @@ def obtener_entero_env(nombre_variable: str, valor_defecto: int) -> int:
 
 
 IA_MAX_REGISTROS = obtener_entero_env("IA_MAX_REGISTROS", 20)
-
-GEMINI_TIMEOUT_SEGUNDOS = obtener_entero_env("GEMINI_TIMEOUT_SEGUNDOS", 45)
-GEMINI_MAX_REINTENTOS = obtener_entero_env("GEMINI_MAX_REINTENTOS", 1)
-
-MODELO_FALLBACK_GEMINI = os.getenv("GEMINI_FALLBACK_MODEL", "gemini-1.5-flash").strip()
+OPENAI_TIMEOUT_SEGUNDOS = obtener_entero_env("OPENAI_TIMEOUT_SEGUNDOS", 45)
+OPENAI_MAX_REINTENTOS = obtener_entero_env("OPENAI_MAX_REINTENTOS", 1)
+OPENAI_MAX_TOKENS = obtener_entero_env("OPENAI_MAX_TOKENS", 1200)
 
 
 TEMAS_PERMITIDOS = [
@@ -447,7 +456,7 @@ def obtener_contexto_erp(db: Session, modulo: str = "general"):
 
 def construir_prompt_sistema(modulo: str = "general"):
     modulo_seguro = modulo.strip().lower()
-    
+
     instruccion_aislamiento = ""
     if modulo_seguro not in ["general", "gerencial", "reportes", "dashboard", "index"]:
         instruccion_aislamiento = (
@@ -514,88 +523,136 @@ Responde usando solamente estos datos y las reglas del ERP Piladora Don Guillo.
 """
 
 
-def extraer_mensaje_error_gemini(detalle_texto: str):
+def api_key_openai_configurada() -> bool:
+    if not OPENAI_API_KEY:
+        return False
+
+    claves_invalidas = [
+        "PEGAR_AQUI_TU_CLAVE_REAL",
+        "PEGAR_AQUI_TU_OPENAI_API_KEY",
+        "TU_OPENAI_API_KEY",
+        "TU_API_KEY",
+        "OPENAI_API_KEY",
+        "sk-...",
+    ]
+
+    return OPENAI_API_KEY not in claves_invalidas
+
+
+def extraer_mensaje_error_openai(error):
+    codigo = getattr(error, "status_code", None)
+    estado = error.__class__.__name__
+    mensaje = str(error)
+
     try:
-        detalle_json = json.loads(detalle_texto)
-        error = detalle_json.get("error", {})
+        cuerpo = getattr(error, "body", None)
 
-        codigo = error.get("code")
-        estado = error.get("status", "")
-        mensaje = error.get("message", "")
-
-        return codigo, estado, mensaje
+        if isinstance(cuerpo, dict):
+            error_body = cuerpo.get("error", cuerpo)
+            mensaje = error_body.get("message", mensaje)
+            estado = error_body.get("type", estado) or estado
+            codigo = error_body.get("code", codigo) or codigo
 
     except Exception:
-        return None, "", detalle_texto
+        pass
+
+    return codigo, estado, mensaje
 
 
-def mensaje_amigable_error_gemini(codigo, estado, mensaje_tecnico, modelo_usado):
+def mensaje_amigable_error_openai(codigo, estado, mensaje_tecnico, modelo_usado):
     mensaje_tecnico = str(mensaje_tecnico or "")
+    mensaje_minuscula = mensaje_tecnico.lower()
 
     if codigo == 400:
         return (
-            "La solicitud enviada a la IA no fue aceptada. "
-            "Revise que la pregunta no esté vacía y que el modelo configurado sea válido."
+            "La solicitud enviada a OpenAI no fue aceptada. "
+            "Revise que la pregunta no esté vacía, que el modelo configurado sea válido "
+            "y que los parámetros enviados sean compatibles con el modelo."
         )
 
     if codigo == 401:
         return (
-            "No se pudo autenticar con Gemini. "
-            "La clave GEMINI_API_KEY no es válida, está mal copiada o no pertenece a Google AI Studio."
+            "No se pudo autenticar con OpenAI. "
+            "Revise que OPENAI_API_KEY exista en el archivo .env, que esté bien copiada "
+            "y que pertenezca a una cuenta activa."
         )
 
     if codigo == 403:
         return (
-            "La cuenta o proyecto de Google no tiene permiso para usar este modelo de IA. "
-            "Revise la API key, el proyecto de Google AI Studio o cambie el modelo configurado."
+            "La cuenta de OpenAI no tiene permiso para usar este modelo o este proyecto. "
+            "Revise permisos, facturación, proyecto y organización de OpenAI."
         )
 
     if codigo == 404:
         return (
-            f"El modelo de IA configurado no fue encontrado: {modelo_usado}. "
-            "Revise el valor de GEMINI_MODEL en el archivo .env."
+            f"El modelo de OpenAI configurado no fue encontrado: {modelo_usado}. "
+            "Revise el valor de OPENAI_MODEL en el archivo .env."
         )
 
-    if codigo == 429:
+    if codigo == 408:
         return (
-            "Se alcanzó el límite de consultas de la IA. "
-            "Espere unos minutos antes de volver a consultar."
-        )
-
-    if codigo == 500:
-        return (
-            "El proveedor de IA tuvo un error interno temporal. "
+            "La consulta a OpenAI tardó demasiado tiempo. "
             "Intente nuevamente en unos minutos."
         )
 
-    if codigo == 503:
+    if codigo == 429:
+        if "quota" in mensaje_minuscula or "billing" in mensaje_minuscula or "insufficient" in mensaje_minuscula:
+            return (
+                "OpenAI rechazó la consulta por límite de cuota, crédito insuficiente o facturación no disponible. "
+                "Revise el saldo, el método de pago y los límites de uso de la cuenta."
+            )
+
         return (
-            f"El modelo {modelo_usado} está temporalmente saturado por alta demanda. "
-            "Intente nuevamente en unos minutos o use un modelo más estable como gemini-1.5-flash."
+            "Se alcanzó el límite temporal de consultas de OpenAI. "
+            "Espere unos minutos antes de volver a consultar."
         )
 
-    if "api key not valid" in mensaje_tecnico.lower():
+    if codigo in [500, 502, 503, 504]:
         return (
-            "La clave de Gemini no es válida. "
-            "Genere una nueva API key desde Google AI Studio y colóquela en el archivo .env."
+            "OpenAI tuvo un error temporal o alta demanda en este momento. "
+            "Intente nuevamente en unos minutos."
         )
 
-    if "quota" in mensaje_tecnico.lower():
+    if "api key" in mensaje_minuscula and ("invalid" in mensaje_minuscula or "incorrect" in mensaje_minuscula):
         return (
-            "La cuenta alcanzó el límite o cuota disponible de Gemini. "
-            "Espere unos minutos o revise el límite de uso en Google AI Studio."
+            "La API key de OpenAI no es válida. "
+            "Genere o copie nuevamente la clave y colóquela en OPENAI_API_KEY dentro del archivo .env."
+        )
+
+    if "model" in mensaje_minuscula and ("not found" in mensaje_minuscula or "does not exist" in mensaje_minuscula):
+        return (
+            f"El modelo configurado no existe o no está disponible para la cuenta: {modelo_usado}. "
+            "Revise OPENAI_MODEL en el archivo .env."
+        )
+
+    if "billing" in mensaje_minuscula or "quota" in mensaje_minuscula:
+        return (
+            "La cuenta de OpenAI tiene un problema de facturación, saldo o cuota. "
+            "Revise la sección de billing/usage de OpenAI."
+        )
+
+    if "timeout" in mensaje_minuscula or "timed out" in mensaje_minuscula:
+        return (
+            "La consulta a OpenAI excedió el tiempo de espera. "
+            "Revise la conexión o vuelva a intentar."
+        )
+
+    if "connection" in mensaje_minuscula or "network" in mensaje_minuscula:
+        return (
+            "No se pudo conectar con OpenAI. "
+            "Revise la conexión a internet del servidor donde está corriendo FastAPI."
         )
 
     return (
-        "No se pudo consultar la IA en este momento. "
-        "Revise la conexión, la API key o intente nuevamente más tarde."
+        "No se pudo consultar OpenAI en este momento. "
+        "Revise la API key, el modelo, la facturación, la conexión o intente nuevamente más tarde."
     )
 
 
 def construir_respuesta_error_ia(
     respuesta_usuario: str,
     codigo=None,
-    estado_gemini: str = "",
+    estado_openai: str = "",
     modelo_usado: str = "",
     detalle_tecnico: str = "",
 ):
@@ -603,246 +660,112 @@ def construir_respuesta_error_ia(
         "estado": "error",
         "respuesta": respuesta_usuario,
         "codigo_error": codigo,
-        "estado_gemini": estado_gemini,
+        "estado_openai": estado_openai,
         "modelo_usado": modelo_usado,
         "detalle_tecnico": detalle_tecnico,
     }
 
 
-def construir_url_gemini(modelo: str):
-    return (
-        f"https://generativelanguage.googleapis.com/v1beta/models/"
-        f"{modelo}:generateContent?key={GEMINI_API_KEY}"
+def llamar_openai_una_vez(prompt_sistema: str, prompt_usuario: str):
+    cliente_openai = OpenAI(
+        api_key=OPENAI_API_KEY,
+        timeout=OPENAI_TIMEOUT_SEGUNDOS,
+        max_retries=0,
     )
 
-
-def construir_cuerpo_gemini(prompt_sistema: str, prompt_usuario: str):
-    return {
-        "systemInstruction": {
-            "parts": [
-                {
-                    "text": prompt_sistema,
-                }
-            ]
-        },
-        "contents": [
+    respuesta = cliente_openai.chat.completions.create(
+        model=OPENAI_MODEL,
+        messages=[
+            {
+                "role": "system",
+                "content": prompt_sistema,
+            },
             {
                 "role": "user",
-                "parts": [
-                    {
-                        "text": prompt_usuario,
-                    }
-                ],
-            }
+                "content": prompt_usuario,
+            },
         ],
-        "generationConfig": {
-            "temperature": 0.2,
-            "topP": 0.8,
-            "maxOutputTokens": 1200,
-        },
-    }
-
-
-def llamar_gemini_una_vez(prompt_sistema: str, prompt_usuario: str, modelo: str):
-    url = construir_url_gemini(modelo)
-    cuerpo = construir_cuerpo_gemini(prompt_sistema, prompt_usuario)
-    data = json.dumps(cuerpo).encode("utf-8")
-
-    solicitud = urllib.request.Request(
-        url,
-        data=data,
-        headers={
-            "Content-Type": "application/json",
-        },
-        method="POST",
+        temperature=0.2,
+        max_tokens=OPENAI_MAX_TOKENS,
     )
 
-    with urllib.request.urlopen(solicitud, timeout=GEMINI_TIMEOUT_SEGUNDOS) as respuesta:
-        contenido = respuesta.read().decode("utf-8")
-        respuesta_json = json.loads(contenido)
-
-    candidatos = respuesta_json.get("candidates", [])
-
-    if not candidatos:
+    if not respuesta.choices:
         return {
             "estado": "error",
-            "respuesta": "La IA no devolvió una respuesta válida. Intente reformular la pregunta.",
-            "modelo_usado": modelo,
+            "respuesta": "OpenAI no devolvió una respuesta válida. Intente reformular la pregunta.",
+            "modelo_usado": OPENAI_MODEL,
         }
 
-    partes = candidatos[0].get("content", {}).get("parts", [])
-    textos = []
+    texto_respuesta = respuesta.choices[0].message.content
 
-    for parte in partes:
-        if "text" in parte:
-            textos.append(parte["text"])
+    if texto_respuesta is None:
+        texto_respuesta = ""
 
-    texto_respuesta = "\n".join(textos).strip()
+    texto_respuesta = texto_respuesta.strip()
 
     if not texto_respuesta:
-        texto_respuesta = "La IA respondió vacío. Intente reformular la pregunta."
+        texto_respuesta = "OpenAI respondió vacío. Intente reformular la pregunta."
 
     return {
         "estado": "ok",
         "respuesta": texto_respuesta,
-        "modelo_usado": modelo,
+        "modelo_usado": OPENAI_MODEL,
     }
 
 
-def consultar_gemini(prompt_sistema: str, prompt_usuario: str):
-    if not GEMINI_API_KEY or GEMINI_API_KEY == "PEGAR_AQUI_TU_CLAVE_REAL":
+def consultar_openai(prompt_sistema: str, prompt_usuario: str):
+    if not api_key_openai_configurada():
         return construir_respuesta_error_ia(
-            "La IA real todavía no está configurada. Debe colocar una clave válida en GEMINI_API_KEY dentro del archivo .env.",
+            "La IA real todavía no está configurada. Debe colocar una clave válida en OPENAI_API_KEY dentro del archivo .env.",
             codigo=401,
-            estado_gemini="API_KEY_NO_CONFIGURADA",
-            modelo_usado=GEMINI_MODEL,
+            estado_openai="API_KEY_NO_CONFIGURADA",
+            modelo_usado=OPENAI_MODEL,
         )
 
-    modelos_a_probar = [GEMINI_MODEL]
-
-    if (
-        MODELO_FALLBACK_GEMINI
-        and MODELO_FALLBACK_GEMINI not in modelos_a_probar
-        and GEMINI_MODEL != MODELO_FALLBACK_GEMINI
-    ):
-        modelos_a_probar.append(MODELO_FALLBACK_GEMINI)
-
+    intentos = 0
     ultimo_error = None
 
-    for indice_modelo, modelo in enumerate(modelos_a_probar):
-        intentos = 0
+    while intentos <= OPENAI_MAX_REINTENTOS:
+        try:
+            return llamar_openai_una_vez(prompt_sistema, prompt_usuario)
 
-        while intentos <= GEMINI_MAX_REINTENTOS:
-            try:
-                return llamar_gemini_una_vez(prompt_sistema, prompt_usuario, modelo)
+        except Exception as error:
+            codigo, estado, mensaje_tecnico = extraer_mensaje_error_openai(error)
 
-            except urllib.error.HTTPError as error:
-                detalle = error.read().decode("utf-8", errors="replace")
-                codigo, estado, mensaje_tecnico = extraer_mensaje_error_gemini(detalle)
+            respuesta_amigable = mensaje_amigable_error_openai(
+                codigo,
+                estado,
+                mensaje_tecnico,
+                OPENAI_MODEL,
+            )
 
-                if codigo is None:
-                    codigo = error.code
+            ultimo_error = construir_respuesta_error_ia(
+                respuesta_amigable,
+                codigo=codigo,
+                estado_openai=estado,
+                modelo_usado=OPENAI_MODEL,
+                detalle_tecnico=mensaje_tecnico,
+            )
 
-                respuesta_amigable = mensaje_amigable_error_gemini(
-                    codigo,
-                    estado,
-                    mensaje_tecnico,
-                    modelo,
-                )
+            error_temporal = codigo in [408, 429, 500, 502, 503, 504]
 
-                ultimo_error = construir_respuesta_error_ia(
-                    respuesta_amigable,
-                    codigo=codigo,
-                    estado_gemini=estado,
-                    modelo_usado=modelo,
-                    detalle_tecnico=detalle,
-                )
+            if error_temporal and intentos < OPENAI_MAX_REINTENTOS:
+                intentos += 1
+                time_module.sleep(1)
+                continue
 
-                es_error_temporal = codigo in [429, 500, 503]
-
-                if es_error_temporal and intentos < GEMINI_MAX_REINTENTOS:
-                    intentos += 1
-                    time_module.sleep(1)
-                    continue
-
-                if es_error_temporal and indice_modelo + 1 < len(modelos_a_probar):
-                    break
-
-                return ultimo_error
-
-            except urllib.error.URLError as error:
-                detalle = str(error)
-
-                ultimo_error = construir_respuesta_error_ia(
-                    "No se pudo conectar con Gemini. Revise la conexión a internet o la disponibilidad del servicio de IA.",
-                    codigo="CONEXION",
-                    estado_gemini="URL_ERROR",
-                    modelo_usado=modelo,
-                    detalle_tecnico=detalle,
-                )
-
-                if intentos < GEMINI_MAX_REINTENTOS:
-                    intentos += 1
-                    time_module.sleep(1)
-                    continue
-
-                if indice_modelo + 1 < len(modelos_a_probar):
-                    break
-
-                return ultimo_error
-
-            except socket.timeout:
-                ultimo_error = construir_respuesta_error_ia(
-                    "La consulta a Gemini tardó demasiado tiempo. Intente nuevamente en unos minutos.",
-                    codigo="TIMEOUT",
-                    estado_gemini="TIMEOUT",
-                    modelo_usado=modelo,
-                    detalle_tecnico="Timeout al consultar Gemini.",
-                )
-
-                if intentos < GEMINI_MAX_REINTENTOS:
-                    intentos += 1
-                    time_module.sleep(1)
-                    continue
-
-                if indice_modelo + 1 < len(modelos_a_probar):
-                    break
-
-                return ultimo_error
-
-            except Exception as error:
-                return construir_respuesta_error_ia(
-                    "Ocurrió un error inesperado al consultar la IA. Revise la configuración del backend.",
-                    codigo="ERROR_INTERNO",
-                    estado_gemini="EXCEPTION",
-                    modelo_usado=modelo,
-                    detalle_tecnico=str(error),
-                )
+            return ultimo_error
 
     if ultimo_error:
         return ultimo_error
 
     return construir_respuesta_error_ia(
-        "No se pudo consultar la IA en este momento.",
+        "No se pudo consultar OpenAI en este momento.",
         codigo="SIN_RESPUESTA",
-        estado_gemini="SIN_RESPUESTA",
-        modelo_usado=GEMINI_MODEL,
+        estado_openai="SIN_RESPUESTA",
+        modelo_usado=OPENAI_MODEL,
     )
 
-def consultar_openai(prompt_sistema: str, prompt_usuario: str):
-    """
-    Función de respaldo que llama a OpenAI si Gemini falla.
-    """
-    if not OPENAI_API_KEY:
-        return construir_respuesta_error_ia(
-            "API KEY de OpenAI no configurada en el entorno.",
-            codigo=401,
-            modelo_usado=OPENAI_MODEL
-        )
-
-    try:
-        cliente_openai = OpenAI(api_key=OPENAI_API_KEY)
-        respuesta = cliente_openai.chat.completions.create(
-            model=OPENAI_MODEL,
-            messages=[
-                {"role": "system", "content": prompt_sistema},
-                {"role": "user", "content": prompt_usuario}
-            ],
-            temperature=0.2,
-            max_tokens=1200
-        )
-        return {
-            "estado": "ok",
-            "respuesta": respuesta.choices[0].message.content,
-            "modelo_usado": OPENAI_MODEL
-        }
-    except Exception as error:
-        return construir_respuesta_error_ia(
-            "El proveedor de respaldo (OpenAI) también falló.",
-            codigo="ERROR_OPENAI",
-            modelo_usado=OPENAI_MODEL,
-            detalle_tecnico=str(error)
-        )
 
 def consultar_ia_erp(db: Session, pregunta: str, contexto_modulo: str = "general"):
     pregunta_limpia = pregunta.strip()
@@ -851,7 +774,7 @@ def consultar_ia_erp(db: Session, pregunta: str, contexto_modulo: str = "general
         return {
             "estado": "error",
             "proveedor": IA_PROVIDER,
-            "modelo": GEMINI_MODEL,
+            "modelo": OPENAI_MODEL,
             "respuesta": "Debe escribir una pregunta para la IA.",
         }
 
@@ -859,7 +782,7 @@ def consultar_ia_erp(db: Session, pregunta: str, contexto_modulo: str = "general
         return {
             "estado": "error",
             "proveedor": IA_PROVIDER,
-            "modelo": GEMINI_MODEL,
+            "modelo": OPENAI_MODEL,
             "respuesta": "La pregunta es demasiado larga. Redúzcala y vuelva a intentar.",
         }
 
@@ -867,7 +790,7 @@ def consultar_ia_erp(db: Session, pregunta: str, contexto_modulo: str = "general
         return {
             "estado": "bloqueado",
             "proveedor": IA_PROVIDER,
-            "modelo": GEMINI_MODEL,
+            "modelo": OPENAI_MODEL,
             "respuesta": (
                 "Solo puedo responder preguntas relacionadas con el ERP Piladora Don Guillo: "
                 "compras, báscula, inventario, producción, ventas, talento humano, auditoría, "
@@ -880,56 +803,40 @@ def consultar_ia_erp(db: Session, pregunta: str, contexto_modulo: str = "general
     prompt_sistema = construir_prompt_sistema(contexto_modulo)
     prompt_usuario = construir_prompt_usuario(pregunta_limpia, contexto)
 
-    if IA_PROVIDER == "gemini":
-        respuesta = consultar_gemini(prompt_sistema, prompt_usuario)
+    respuesta = consultar_openai(prompt_sistema, prompt_usuario)
 
-        if respuesta.get("estado") == "ok":
-            return {
-                "estado": "exito",
-                "proveedor": "gemini",
-                "modelo": respuesta.get("modelo_usado", GEMINI_MODEL),
-                "respuesta": respuesta.get("respuesta", "No se obtuvo respuesta de la IA."),
-                "codigo_error": respuesta.get("codigo_error"),
-                "estado_gemini": respuesta.get("estado_gemini"),
-            }
-        else:
-            print(f"Alerta: Gemini falló ({respuesta.get('detalle_tecnico')}). Activando respaldo OpenAI...")
-            respuesta_openai = consultar_openai(prompt_sistema, prompt_usuario)
-            
-            if respuesta_openai.get("estado") == "ok":
-                return {
-                    "estado": "exito",
-                    "proveedor": "openai (respaldo)",
-                    "modelo": respuesta_openai.get("modelo_usado", OPENAI_MODEL),
-                    "respuesta": respuesta_openai.get("respuesta", "No se obtuvo respuesta de OpenAI."),
-                }
-            else:
-                return {
-                    "estado": "error",
-                    "proveedor": "ambos_fallaron",
-                    "modelo": "N/A",
-                    "respuesta": "Ambos proveedores de Inteligencia Artificial están temporalmente saturados. Por favor, intente nuevamente en unos minutos.",
-                    "detalle_tecnico": respuesta_openai.get("detalle_tecnico")
-                }
+    if respuesta.get("estado") == "ok":
+        return {
+            "estado": "exito",
+            "proveedor": IA_PROVIDER,
+            "modelo": respuesta.get("modelo_usado", OPENAI_MODEL),
+            "respuesta": respuesta.get("respuesta", "No se obtuvo respuesta de OpenAI."),
+            "codigo_error": respuesta.get("codigo_error"),
+            "estado_openai": respuesta.get("estado_openai"),
+        }
 
     return {
         "estado": "error",
         "proveedor": IA_PROVIDER,
-        "modelo": GEMINI_MODEL,
-        "respuesta": "Proveedor de IA no soportado. Configure IA_PROVIDER=gemini en el archivo .env.",
+        "modelo": respuesta.get("modelo_usado", OPENAI_MODEL),
+        "respuesta": respuesta.get("respuesta", "No se pudo obtener respuesta de OpenAI."),
+        "codigo_error": respuesta.get("codigo_error"),
+        "estado_openai": respuesta.get("estado_openai"),
+        "detalle_tecnico": respuesta.get("detalle_tecnico"),
     }
 
 
 def estado_ia():
     return {
         "proveedor": IA_PROVIDER,
-        "modelo": GEMINI_MODEL,
-        "modelo_fallback": MODELO_FALLBACK_GEMINI,
-        "openai_configurada": bool(OPENAI_API_KEY),
-        "configurada": bool(GEMINI_API_KEY and GEMINI_API_KEY != "AQ.Ab8RN6JCkSL9eHYJdc7zLUmNAemxEJDtYM7uit7LypG5jEQAqw"),
+        "modelo": OPENAI_MODEL,
+        "openai_configurada": api_key_openai_configurada(),
+        "configurada": api_key_openai_configurada(),
         "modo": "solo lectura",
         "backend": "FastAPI",
         "base_datos": "PostgreSQL",
         "max_registros": IA_MAX_REGISTROS,
-        "timeout_segundos": GEMINI_TIMEOUT_SEGUNDOS,
+        "timeout_segundos": OPENAI_TIMEOUT_SEGUNDOS,
+        "max_reintentos": OPENAI_MAX_REINTENTOS,
+        "max_tokens": OPENAI_MAX_TOKENS,
     }
