@@ -12,6 +12,12 @@ const idUsuarioGuardado = localStorage.getItem("idUsuarioERP");
 const idAccesoGuardado = localStorage.getItem("idAccesoERP");
 
 /* ---------------------------------------------------- */
+/* CONFIGURACIÓN GLOBAL DE FECHAS DEL ERP               */
+/* ---------------------------------------------------- */
+
+const FECHA_MINIMA_EMPRESA_ERP = "2020-01-01";
+
+/* ---------------------------------------------------- */
 /* FUNCIONES GENERALES                                  */
 /* ---------------------------------------------------- */
 
@@ -48,6 +54,202 @@ async function apiPutLocal(ruta, datos) {
 
   return resultado;
 }
+
+/* ---------------------------------------------------- */
+/* VALIDACIÓN GLOBAL DE FECHAS DEL ERP                  */
+/* ---------------------------------------------------- */
+/*
+  Esta validación aplica para todos los módulos del ERP.
+
+  Reglas:
+  - No permite fechas menores a 2020-01-01.
+  - No permite fechas futuras.
+  - Aplica automáticamente a todos los input type="date".
+  - Si algún campo especial necesita excluirse, agregar en HTML:
+    data-sin-validacion-fecha="true"
+*/
+
+function obtenerNombreCampoFechaERP(campo) {
+  const label = campo.closest(".col-md-1, .col-md-2, .col-md-3, .col-md-4, .col-md-5, .col-md-6, .col-md-12, .form-group")?.querySelector("label");
+
+  if (label && label.textContent.trim() !== "") {
+    return label.textContent.trim();
+  }
+
+  if (campo.name && campo.name.trim() !== "") {
+    return campo.name.trim();
+  }
+
+  if (campo.id && campo.id.trim() !== "") {
+    return campo.id.trim();
+  }
+
+  return "La fecha";
+}
+
+function campoFechaDebeIgnorarseERP(campo) {
+  if (!campo) return true;
+
+  return (
+    campo.dataset.sinValidacionFecha === "true" ||
+    campo.dataset.permitirFechaAntigua === "true" ||
+    campo.dataset.permitirFechaFutura === "true"
+  );
+}
+
+function validarFechaDentroRangoERP(campo, mostrarMensaje = true) {
+  if (!campo || campo.type !== "date") {
+    return true;
+  }
+
+  if (campoFechaDebeIgnorarseERP(campo)) {
+    return true;
+  }
+
+  const valor = campo.value;
+
+  if (!valor) {
+    return true;
+  }
+
+  const fechaActual = obtenerFechaActualISO();
+  const nombreCampo = obtenerNombreCampoFechaERP(campo);
+
+  if (valor < FECHA_MINIMA_EMPRESA_ERP) {
+    if (mostrarMensaje) {
+      alert(`${nombreCampo} no puede ser menor a ${FECHA_MINIMA_EMPRESA_ERP}.`);
+    }
+
+    campo.value = "";
+    campo.focus();
+    return false;
+  }
+
+  if (valor > fechaActual) {
+    if (mostrarMensaje) {
+      alert(`${nombreCampo} no puede ser una fecha futura.`);
+    }
+
+    campo.value = "";
+    campo.focus();
+    return false;
+  }
+
+  return true;
+}
+
+function aplicarRestriccionFechasERP(contenedor = document) {
+  const fechaActual = obtenerFechaActualISO();
+  const camposFecha = contenedor.querySelectorAll
+    ? contenedor.querySelectorAll('input[type="date"]')
+    : [];
+
+  camposFecha.forEach((campo) => {
+    if (campoFechaDebeIgnorarseERP(campo)) {
+      return;
+    }
+
+    campo.min = FECHA_MINIMA_EMPRESA_ERP;
+    campo.max = fechaActual;
+
+    if (campo.title && !campo.title.includes("2020-01-01")) {
+      campo.title = `${campo.title} Permitido desde ${FECHA_MINIMA_EMPRESA_ERP} hasta la fecha actual.`;
+    } else if (!campo.title) {
+      campo.title = `Permitido desde ${FECHA_MINIMA_EMPRESA_ERP} hasta la fecha actual.`;
+    }
+
+    if (campo.value) {
+      validarFechaDentroRangoERP(campo, false);
+    }
+
+    if (campo.dataset.validacionFechaErpAplicada === "true") {
+      return;
+    }
+
+    campo.dataset.validacionFechaErpAplicada = "true";
+
+    campo.addEventListener("change", function () {
+      validarFechaDentroRangoERP(this, true);
+    });
+
+    campo.addEventListener("blur", function () {
+      validarFechaDentroRangoERP(this, true);
+    });
+  });
+}
+
+function validarFechasFormularioERP(formulario) {
+  if (!formulario) {
+    return true;
+  }
+
+  const camposFecha = formulario.querySelectorAll('input[type="date"]');
+
+  for (const campo of camposFecha) {
+    const fechaValida = validarFechaDentroRangoERP(campo, true);
+
+    if (!fechaValida) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function activarValidacionGlobalFechasERP() {
+  aplicarRestriccionFechasERP(document);
+
+  if (document.body && !document.body.dataset.validacionSubmitFechasErp) {
+    document.body.dataset.validacionSubmitFechasErp = "true";
+
+    document.addEventListener(
+      "submit",
+      function (event) {
+        const formulario = event.target;
+
+        if (!formulario || formulario.tagName !== "FORM") {
+          return;
+        }
+
+        const fechasValidas = validarFechasFormularioERP(formulario);
+
+        if (!fechasValidas) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      },
+      true
+    );
+  }
+
+  if (window.MutationObserver && document.body && !window.observadorFechasERP) {
+    window.observadorFechasERP = new MutationObserver(function (mutaciones) {
+      mutaciones.forEach(function (mutacion) {
+        mutacion.addedNodes.forEach(function (nodo) {
+          if (nodo.nodeType !== 1) {
+            return;
+          }
+
+          if (nodo.matches && nodo.matches('input[type="date"]')) {
+            aplicarRestriccionFechasERP(nodo.parentElement || document);
+          } else if (nodo.querySelectorAll) {
+            aplicarRestriccionFechasERP(nodo);
+          }
+        });
+      });
+    });
+
+    window.observadorFechasERP.observe(document.body, {
+      childList: true,
+      subtree: true,
+    });
+  }
+}
+
+window.FECHA_MINIMA_EMPRESA_ERP = FECHA_MINIMA_EMPRESA_ERP;
+window.aplicarRestriccionFechasERP = aplicarRestriccionFechasERP;
+window.validarFechaDentroRangoERP = validarFechaDentroRangoERP;
+window.validarFechasFormularioERP = validarFechasFormularioERP;
 
 /* ---------------------------------------------------- */
 /* VALIDACIÓN DE CÉDULA Y RUC ECUADOR                   */
@@ -233,6 +435,14 @@ document.addEventListener("DOMContentLoaded", function () {
       }
     });
   }
+});
+
+/* ---------------------------------------------------- */
+/* ACTIVAR VALIDACIÓN GLOBAL DE FECHAS                  */
+/* ---------------------------------------------------- */
+
+document.addEventListener("DOMContentLoaded", function () {
+  activarValidacionGlobalFechasERP();
 });
 
 /* ---------------------------------------------------- */
