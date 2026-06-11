@@ -4,6 +4,8 @@ from sqlalchemy import text
 from pydantic import BaseModel, EmailStr
 from typing import Optional, List
 from datetime import datetime
+import hashlib
+import hmac
 
 from app.database import get_db
 
@@ -76,14 +78,100 @@ class PermisosUsuarioUpdate(BaseModel):
 
 
 # ----------------------------------------------------
-# FUNCIÓN INTERNA PARA AUDITORÍA
+# FUNCIONES DE ESTRUCTURA
 # ----------------------------------------------------
+
+def tabla_existe(db: Session, nombre_tabla: str) -> bool:
+    resultado = db.execute(
+        text("""
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name = :nombre_tabla
+            ) AS existe;
+        """),
+        {"nombre_tabla": nombre_tabla}
+    ).mappings().first()
+
+    return bool(resultado["existe"])
+
+
+def asegurar_estructura_seguridad(db: Session):
+    """
+    Prepara columnas necesarias para auditoría de seguridad.
+    No elimina datos ni cambia lógica existente.
+    """
+    try:
+        if tabla_existe(db, "auditoria_accesos"):
+            db.execute(text("""
+                ALTER TABLE auditoria_accesos
+                ADD COLUMN IF NOT EXISTS navegador VARCHAR(300);
+            """))
+
+            db.execute(text("""
+                ALTER TABLE auditoria_accesos
+                ADD COLUMN IF NOT EXISTS fecha_creacion TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW();
+            """))
+
+            db.execute(text("""
+                UPDATE auditoria_accesos
+                SET estado_sesion = 'Activa'
+                WHERE LOWER(COALESCE(estado_sesion, '')) IN ('abierta', 'activo');
+            """))
+
+            db.execute(text("""
+                UPDATE auditoria_accesos
+                SET estado_sesion = 'Cerrada'
+                WHERE LOWER(COALESCE(estado_sesion, '')) = 'cerrado';
+            """))
+
+        if tabla_existe(db, "auditoria_acciones"):
+            db.execute(text("""
+                ALTER TABLE auditoria_acciones
+                ADD COLUMN IF NOT EXISTS ip_equipo VARCHAR(100);
+            """))
+
+            db.execute(text("""
+                ALTER TABLE auditoria_acciones
+                ADD COLUMN IF NOT EXISTS navegador VARCHAR(300);
+            """))
+
+            db.execute(text("""
+                ALTER TABLE auditoria_acciones
+                ADD COLUMN IF NOT EXISTS fecha_creacion TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW();
+            """))
+
+            db.execute(text("""
+                UPDATE auditoria_acciones
+                SET accion = 'INGRESO_MODULO'
+                WHERE UPPER(COALESCE(accion, '')) = 'ACCESO_MODULO';
+            """))
+
+        db.commit()
+
+    except Exception as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"No se pudo preparar la estructura de seguridad/auditoría. Detalle: {str(error)}"
+        )
+
+
+# ----------------------------------------------------
+# FUNCIONES INTERNAS PARA AUDITORÍA
+# ----------------------------------------------------
+
+def limpiar_texto(valor: Optional[str]) -> str:
+    if valor is None:
+        return ""
+    return str(valor).strip()
+
 
 def limpiar_valor_ip(valor: Optional[str]) -> Optional[str]:
     """
     Limpia valores recibidos desde headers de proxy.
     Evita guardar valores vacíos, desconocidos o demasiado largos.
-    La columna auditoria_accesos.ip_equipo ya soporta hasta VARCHAR(100).
     """
     if valor is None:
         return None
@@ -99,22 +187,26 @@ def limpiar_valor_ip(valor: Optional[str]) -> Optional[str]:
     return valor_limpio[:100]
 
 
+def limpiar_navegador(valor: Optional[str]) -> Optional[str]:
+    if valor is None:
+        return None
+
+    valor_limpio = valor.strip()
+
+    if not valor_limpio:
+        return None
+
+    if valor_limpio.lower() in ["unknown", "null", "none", "undefined"]:
+        return None
+
+    return valor_limpio[:300]
+
+
 def obtener_ip_cliente(request: Request) -> str:
     """
     Obtiene la IP real del cliente desde FastAPI.
-
-    En producción, Render trabaja detrás de proxy, por eso se revisan primero
-    los headers más comunes:
-
-    1. cf-connecting-ip
-    2. x-forwarded-for
-    3. x-real-ip
-    4. request.client.host
-    5. 127.0.0.1 como respaldo final
-
-    No se depende del frontend para conocer la IP real.
+    En producción, Render trabaja detrás de proxy.
     """
-
     cf_ip = limpiar_valor_ip(request.headers.get("cf-connecting-ip"))
     if cf_ip:
         return cf_ip
@@ -139,127 +231,293 @@ def obtener_ip_cliente(request: Request) -> str:
     return "127.0.0.1"
 
 
+def obtener_navegador_cliente(request: Request) -> str:
+    navegador = limpiar_navegador(request.headers.get("user-agent"))
+    return navegador or "No identificado"
+
+
+def normalizar_accion_auditoria(accion: str) -> str:
+    accion_limpia = str(accion or "").strip().upper().replace(" ", "_")
+
+    equivalencias = {
+        "ACCESO_MODULO": "INGRESO_MODULO",
+        "ENTRAR_MODULO": "INGRESO_MODULO",
+        "INGRESAR_MODULO": "INGRESO_MODULO",
+        "REGISTRAR": "CREAR",
+        "REGISTRADO": "CREAR",
+        "CREADO": "CREAR",
+        "INSERT": "CREAR",
+        "INSERTAR": "CREAR",
+        "UPDATE": "EDITAR",
+        "ACTUALIZAR": "EDITAR",
+        "MODIFICAR": "EDITAR",
+        "BORRAR": "ELIMINAR",
+        "DELETE": "ELIMINAR",
+        "DESACTIVAR": "INACTIVAR"
+    }
+
+    return equivalencias.get(accion_limpia, accion_limpia)
+
+
+def verificar_contrasena(contrasena_ingresada: str, contrasena_guardada: str) -> bool:
+    """
+    Mantiene compatibilidad con tu sistema actual, donde contrasena_hash
+    puede estar guardada como texto directo. También soporta hashes simples.
+    """
+    contrasena_ingresada = limpiar_texto(contrasena_ingresada)
+    contrasena_guardada = limpiar_texto(contrasena_guardada)
+
+    if contrasena_ingresada == "" or contrasena_guardada == "":
+        return False
+
+    if hmac.compare_digest(contrasena_ingresada, contrasena_guardada):
+        return True
+
+    try:
+        sha256 = hashlib.sha256(contrasena_ingresada.encode("utf-8")).hexdigest()
+        if hmac.compare_digest(sha256, contrasena_guardada):
+            return True
+    except Exception:
+        pass
+
+    try:
+        sha512 = hashlib.sha512(contrasena_ingresada.encode("utf-8")).hexdigest()
+        if hmac.compare_digest(sha512, contrasena_guardada):
+            return True
+    except Exception:
+        pass
+
+    try:
+        md5 = hashlib.md5(contrasena_ingresada.encode("utf-8")).hexdigest()
+        if hmac.compare_digest(md5, contrasena_guardada):
+            return True
+    except Exception:
+        pass
+
+    return False
+
+
+def accion_reciente_existe(
+    db: Session,
+    id_usuario: int,
+    modulo: str,
+    accion: str,
+    segundos: int = 5
+) -> Optional[int]:
+    """
+    Evita duplicados rápidos de acciones como LOGIN, LOGOUT,
+    INGRESO_MODULO o ACCESO_DENEGADO.
+    """
+    resultado = db.execute(
+        text("""
+            SELECT id_accion
+            FROM auditoria_acciones
+            WHERE id_usuario = :id_usuario
+              AND modulo = :modulo
+              AND accion = :accion
+              AND (fecha_accion::timestamp + hora_accion) >= (NOW() - (:segundos * INTERVAL '1 second'))
+            ORDER BY id_accion DESC
+            LIMIT 1;
+        """),
+        {
+            "id_usuario": id_usuario,
+            "modulo": modulo,
+            "accion": accion,
+            "segundos": segundos
+        }
+    ).mappings().first()
+
+    if resultado is None:
+        return None
+
+    return resultado["id_accion"]
+
+
+def registrar_auditoria_general(
+    db: Session,
+    id_usuario: Optional[int],
+    modulo: str,
+    accion: str,
+    descripcion: str,
+    tabla_afectada: Optional[str] = None,
+    id_registro_afectado: Optional[int] = None,
+    ip_equipo: Optional[str] = None,
+    navegador: Optional[str] = None,
+    evitar_duplicado: bool = False
+):
+    """
+    Función general reutilizable para registrar auditoría desde cualquier módulo.
+    Puede ser usada por compras.py, ventas.py, inventario.py, talento_humano.py, etc.
+    """
+    if id_usuario is None:
+        return None
+
+    modulo = limpiar_texto(modulo)
+    accion_normalizada = normalizar_accion_auditoria(accion)
+    descripcion = limpiar_texto(descripcion)
+
+    if modulo == "" or accion_normalizada == "" or descripcion == "":
+        return None
+
+    try:
+        if evitar_duplicado:
+            accion_existente = accion_reciente_existe(
+                db=db,
+                id_usuario=id_usuario,
+                modulo=modulo,
+                accion=accion_normalizada,
+                segundos=5
+            )
+
+            if accion_existente is not None:
+                return accion_existente
+
+        resultado = db.execute(
+            text("""
+                INSERT INTO auditoria_acciones (
+                    id_usuario,
+                    modulo,
+                    accion,
+                    descripcion,
+                    fecha_accion,
+                    hora_accion,
+                    tabla_afectada,
+                    id_registro_afectado,
+                    ip_equipo,
+                    navegador
+                )
+                VALUES (
+                    :id_usuario,
+                    :modulo,
+                    :accion,
+                    :descripcion,
+                    CURRENT_DATE,
+                    CURRENT_TIME,
+                    :tabla_afectada,
+                    :id_registro_afectado,
+                    :ip_equipo,
+                    :navegador
+                )
+                RETURNING id_accion;
+            """),
+            {
+                "id_usuario": id_usuario,
+                "modulo": modulo,
+                "accion": accion_normalizada,
+                "descripcion": descripcion,
+                "tabla_afectada": tabla_afectada,
+                "id_registro_afectado": id_registro_afectado,
+                "ip_equipo": limpiar_valor_ip(ip_equipo),
+                "navegador": limpiar_navegador(navegador)
+            }
+        )
+
+        fila = resultado.mappings().first()
+
+        if fila:
+            return fila["id_accion"]
+
+        return None
+
+    except Exception:
+        return None
+
+
 def registrar_auditoria_seguridad(
     db: Session,
     id_usuario: Optional[int],
     accion: str,
     descripcion: str,
     tabla_afectada: Optional[str] = None,
-    id_registro_afectado: Optional[int] = None
+    id_registro_afectado: Optional[int] = None,
+    ip_equipo: Optional[str] = None,
+    navegador: Optional[str] = None,
+    modulo: str = "Seguridad y Usuarios",
+    evitar_duplicado: bool = False
 ):
-    if id_usuario is None:
-        return
-
-    try:
-        db.execute(
-            text("""
-                INSERT INTO auditoria_acciones (
-                    id_usuario,
-                    modulo,
-                    accion,
-                    descripcion,
-                    fecha_accion,
-                    hora_accion,
-                    tabla_afectada,
-                    id_registro_afectado
-                )
-                VALUES (
-                    :id_usuario,
-                    'Seguridad y Usuarios',
-                    :accion,
-                    :descripcion,
-                    CURRENT_DATE,
-                    CURRENT_TIME,
-                    :tabla_afectada,
-                    :id_registro_afectado
-                );
-            """),
-            {
-                "id_usuario": id_usuario,
-                "accion": accion.strip().upper(),
-                "descripcion": descripcion,
-                "tabla_afectada": tabla_afectada,
-                "id_registro_afectado": id_registro_afectado
-            }
-        )
-    except Exception:
-        pass
+    return registrar_auditoria_general(
+        db=db,
+        id_usuario=id_usuario,
+        modulo=modulo,
+        accion=accion,
+        descripcion=descripcion,
+        tabla_afectada=tabla_afectada,
+        id_registro_afectado=id_registro_afectado,
+        ip_equipo=ip_equipo,
+        navegador=navegador,
+        evitar_duplicado=evitar_duplicado
+    )
 
 
 def registrar_auditoria_login(
     db: Session,
     id_usuario: int,
-    usuario: str
+    usuario: str,
+    ip_equipo: Optional[str] = None,
+    navegador: Optional[str] = None
 ):
-    try:
-        db.execute(
-            text("""
-                INSERT INTO auditoria_acciones (
-                    id_usuario,
-                    modulo,
-                    accion,
-                    descripcion,
-                    fecha_accion,
-                    hora_accion,
-                    tabla_afectada,
-                    id_registro_afectado
-                )
-                VALUES (
-                    :id_usuario,
-                    'Login',
-                    'LOGIN',
-                    :descripcion,
-                    CURRENT_DATE,
-                    CURRENT_TIME,
-                    'usuarios',
-                    :id_usuario
-                );
-            """),
-            {
-                "id_usuario": id_usuario,
-                "descripcion": f"El usuario {usuario} inició sesión en el sistema."
-            }
-        )
-    except Exception:
-        pass
+    return registrar_auditoria_general(
+        db=db,
+        id_usuario=id_usuario,
+        modulo="Login",
+        accion="LOGIN",
+        descripcion=f"El usuario {usuario} inició sesión en el sistema.",
+        tabla_afectada="usuarios",
+        id_registro_afectado=id_usuario,
+        ip_equipo=ip_equipo,
+        navegador=navegador,
+        evitar_duplicado=True
+    )
 
 
 def registrar_auditoria_logout(
     db: Session,
     id_usuario: int,
-    usuario: str
+    usuario: str,
+    id_acceso: Optional[int] = None,
+    ip_equipo: Optional[str] = None,
+    navegador: Optional[str] = None
 ):
-    try:
-        db.execute(
-            text("""
-                INSERT INTO auditoria_acciones (
-                    id_usuario,
-                    modulo,
-                    accion,
-                    descripcion,
-                    fecha_accion,
-                    hora_accion,
-                    tabla_afectada,
-                    id_registro_afectado
-                )
-                VALUES (
-                    :id_usuario,
-                    'Login',
-                    'LOGOUT',
-                    :descripcion,
-                    CURRENT_DATE,
-                    CURRENT_TIME,
-                    'auditoria_accesos',
-                    NULL
-                );
-            """),
-            {
-                "id_usuario": id_usuario,
-                "descripcion": f"El usuario {usuario} cerró sesión en el sistema."
-            }
-        )
-    except Exception:
-        pass
+    return registrar_auditoria_general(
+        db=db,
+        id_usuario=id_usuario,
+        modulo="Login",
+        accion="LOGOUT",
+        descripcion=f"El usuario {usuario} cerró sesión en el sistema.",
+        tabla_afectada="auditoria_accesos",
+        id_registro_afectado=id_acceso,
+        ip_equipo=ip_equipo,
+        navegador=navegador,
+        evitar_duplicado=True
+    )
+
+
+def obtener_acceso_activo_reciente(
+    db: Session,
+    id_usuario: int,
+    ip_cliente: str,
+    segundos: int = 5
+):
+    resultado = db.execute(
+        text("""
+            SELECT id_acceso
+            FROM auditoria_accesos
+            WHERE id_usuario = :id_usuario
+              AND LOWER(COALESCE(estado_sesion, '')) IN ('activa', 'abierta', 'activo')
+              AND fecha_salida IS NULL
+              AND COALESCE(ip_equipo, '') = :ip_cliente
+              AND (fecha_ingreso::timestamp + hora_ingreso) >= (NOW() - (:segundos * INTERVAL '1 second'))
+            ORDER BY id_acceso DESC
+            LIMIT 1;
+        """),
+        {
+            "id_usuario": id_usuario,
+            "ip_cliente": ip_cliente,
+            "segundos": segundos
+        }
+    ).mappings().first()
+
+    return resultado
 
 
 def cerrar_sesiones_activas_usuario_seguridad(
@@ -268,7 +526,7 @@ def cerrar_sesiones_activas_usuario_seguridad(
 ):
     """
     Cierra sesiones activas anteriores del usuario antes de crear una nueva.
-    Esto evita que queden muchas sesiones abiertas cuando el usuario entra varias veces.
+    Evita sesiones abiertas acumuladas cuando el usuario entra varias veces.
     """
     ahora = datetime.now()
     fecha_salida = ahora.date()
@@ -298,10 +556,12 @@ def cerrar_sesiones_activas_usuario_seguridad(
         }
     )
 
+
 def registrar_acceso_login_seguridad(
     db: Session,
     id_usuario: int,
-    ip_cliente: str
+    ip_cliente: str,
+    navegador: Optional[str] = None
 ):
     """
     Registra una nueva sesión activa en auditoria_accesos.
@@ -317,6 +577,7 @@ def registrar_acceso_login_seguridad(
                 fecha_ingreso,
                 hora_ingreso,
                 ip_equipo,
+                navegador,
                 estado_sesion
             )
             VALUES (
@@ -324,6 +585,7 @@ def registrar_acceso_login_seguridad(
                 :fecha_ingreso,
                 :hora_ingreso,
                 :ip_equipo,
+                :navegador,
                 'Activa'
             )
             RETURNING id_acceso;
@@ -332,7 +594,8 @@ def registrar_acceso_login_seguridad(
             "id_usuario": id_usuario,
             "fecha_ingreso": fecha_ingreso,
             "hora_ingreso": hora_ingreso,
-            "ip_equipo": ip_cliente or "127.0.0.1"
+            "ip_equipo": ip_cliente or "127.0.0.1",
+            "navegador": limpiar_navegador(navegador)
         }
     )
 
@@ -472,6 +735,8 @@ def obtener_usuario(id_usuario: int, db: Session = Depends(get_db)):
 @router.post("/usuarios")
 def crear_usuario(usuario: UsuarioCreate, db: Session = Depends(get_db)):
     try:
+        asegurar_estructura_seguridad(db)
+
         existe_perfil = db.execute(
             text("""
                 SELECT id_perfil
@@ -494,7 +759,7 @@ def crear_usuario(usuario: UsuarioCreate, db: Session = Depends(get_db)):
                 FROM usuarios
                 WHERE usuario = :usuario;
             """),
-            {"usuario": usuario.usuario}
+            {"usuario": usuario.usuario.strip()}
         ).first()
 
         if existe_usuario is not None:
@@ -589,6 +854,8 @@ def actualizar_usuario(
     db: Session = Depends(get_db)
 ):
     try:
+        asegurar_estructura_seguridad(db)
+
         existe = db.execute(
             text("""
                 SELECT id_usuario
@@ -625,7 +892,7 @@ def actualizar_usuario(
                   AND id_usuario <> :id_usuario;
             """),
             {
-                "usuario": usuario.usuario,
+                "usuario": usuario.usuario.strip(),
                 "id_usuario": id_usuario
             }
         ).first()
@@ -697,6 +964,8 @@ def cambiar_estado_usuario(
     db: Session = Depends(get_db)
 ):
     try:
+        asegurar_estructura_seguridad(db)
+
         resultado = db.execute(
             text("""
                 UPDATE usuarios
@@ -753,6 +1022,8 @@ def cambiar_contrasena_usuario(
     db: Session = Depends(get_db)
 ):
     try:
+        asegurar_estructura_seguridad(db)
+
         if datos.nueva_contrasena.strip() == "":
             raise HTTPException(
                 status_code=400,
@@ -812,6 +1083,8 @@ def desactivar_usuario(
     db: Session = Depends(get_db)
 ):
     try:
+        asegurar_estructura_seguridad(db)
+
         resultado = db.execute(
             text("""
                 UPDATE usuarios
@@ -866,6 +1139,8 @@ def login(
     db: Session = Depends(get_db)
 ):
     try:
+        asegurar_estructura_seguridad(db)
+
         resultado = db.execute(
             text("""
                 SELECT
@@ -873,18 +1148,17 @@ def login(
                     u.usuario,
                     u.nombres,
                     u.apellidos,
+                    u.contrasena_hash,
                     u.estado,
                     p.id_perfil,
                     p.nombre_perfil
                 FROM usuarios u
                 INNER JOIN perfiles p ON u.id_perfil = p.id_perfil
                 WHERE u.usuario = :usuario
-                  AND u.contrasena_hash = :contrasena
                   AND u.estado = TRUE;
             """),
             {
-                "usuario": datos.usuario,
-                "contrasena": datos.contrasena
+                "usuario": datos.usuario.strip()
             }
         )
 
@@ -896,9 +1170,39 @@ def login(
                 detail="Usuario o contraseña incorrectos."
             )
 
+        if not verificar_contrasena(datos.contrasena, fila["contrasena_hash"]):
+            raise HTTPException(
+                status_code=401,
+                detail="Usuario o contraseña incorrectos."
+            )
+
         usuario_login = dict(fila)
+        usuario_login.pop("contrasena_hash", None)
 
         ip_cliente = obtener_ip_cliente(request)
+        navegador_cliente = obtener_navegador_cliente(request)
+
+        acceso_reciente = obtener_acceso_activo_reciente(
+            db=db,
+            id_usuario=usuario_login["id_usuario"],
+            ip_cliente=ip_cliente,
+            segundos=5
+        )
+
+        if acceso_reciente is not None:
+            id_acceso = acceso_reciente["id_acceso"]
+
+            usuario_login["id_acceso"] = id_acceso
+            usuario_login["ip_equipo"] = ip_cliente
+            usuario_login["navegador"] = navegador_cliente
+
+            db.commit()
+
+            return {
+                "mensaje": "Inicio de sesión correcto",
+                "usuario": usuario_login,
+                "id_acceso": id_acceso
+            }
 
         cerrar_sesiones_activas_usuario_seguridad(
             db=db,
@@ -908,19 +1212,23 @@ def login(
         id_acceso = registrar_acceso_login_seguridad(
             db=db,
             id_usuario=usuario_login["id_usuario"],
-            ip_cliente=ip_cliente
+            ip_cliente=ip_cliente,
+            navegador=navegador_cliente
         )
 
         registrar_auditoria_login(
             db=db,
             id_usuario=usuario_login["id_usuario"],
-            usuario=usuario_login["usuario"]
+            usuario=usuario_login["usuario"],
+            ip_equipo=ip_cliente,
+            navegador=navegador_cliente
         )
 
         db.commit()
 
         usuario_login["id_acceso"] = id_acceso
         usuario_login["ip_equipo"] = ip_cliente
+        usuario_login["navegador"] = navegador_cliente
 
         return {
             "mensaje": "Inicio de sesión correcto",
@@ -945,8 +1253,14 @@ def login(
 # ----------------------------------------------------
 
 @router.post("/logout")
-def logout(datos: LogoutCreate, db: Session = Depends(get_db)):
+def logout(
+    datos: LogoutCreate,
+    request: Request,
+    db: Session = Depends(get_db)
+):
     try:
+        asegurar_estructura_seguridad(db)
+
         usuario = obtener_usuario_por_id(
             db=db,
             id_usuario=datos.id_usuario
@@ -978,6 +1292,8 @@ def logout(datos: LogoutCreate, db: Session = Depends(get_db)):
                         estado_sesion = 'Cerrada'
                     WHERE id_acceso = :id_acceso
                       AND id_usuario = :id_usuario
+                      AND LOWER(COALESCE(estado_sesion, '')) IN ('activa', 'abierta', 'activo')
+                      AND fecha_salida IS NULL
                     RETURNING id_acceso;
                 """),
                 {
@@ -1021,11 +1337,18 @@ def logout(datos: LogoutCreate, db: Session = Depends(get_db)):
 
         acceso_cerrado = resultado.mappings().first()
 
-        registrar_auditoria_logout(
-            db=db,
-            id_usuario=datos.id_usuario,
-            usuario=usuario["usuario"]
-        )
+        ip_cliente = obtener_ip_cliente(request)
+        navegador_cliente = obtener_navegador_cliente(request)
+
+        if acceso_cerrado is not None:
+            registrar_auditoria_logout(
+                db=db,
+                id_usuario=datos.id_usuario,
+                usuario=usuario["usuario"],
+                id_acceso=acceso_cerrado["id_acceso"],
+                ip_equipo=ip_cliente,
+                navegador=navegador_cliente
+            )
 
         db.commit()
 
@@ -1044,6 +1367,8 @@ def logout(datos: LogoutCreate, db: Session = Depends(get_db)):
             status_code=500,
             detail=f"No se pudo cerrar sesión. Detalle: {str(error)}"
         )
+
+
 # ----------------------------------------------------
 # PERMISOS POR USUARIO
 # ----------------------------------------------------
@@ -1100,6 +1425,8 @@ def actualizar_permisos_usuario(
     db: Session = Depends(get_db)
 ):
     try:
+        asegurar_estructura_seguridad(db)
+
         if id_usuario != datos.id_usuario:
             raise HTTPException(
                 status_code=400,
@@ -1216,8 +1543,11 @@ def actualizar_permisos_usuario(
 def validar_modulo(
     id_usuario: int,
     ruta_html: str,
+    request: Request,
     db: Session = Depends(get_db)
 ):
+    asegurar_estructura_seguridad(db)
+
     resultado = db.execute(
         text("""
             SELECT
@@ -1251,6 +1581,9 @@ def validar_modulo(
 
     permiso = resultado.mappings().first()
 
+    ip_cliente = obtener_ip_cliente(request)
+    navegador_cliente = obtener_navegador_cliente(request)
+
     if permiso is None:
         registrar_auditoria_seguridad(
             db=db,
@@ -1258,7 +1591,10 @@ def validar_modulo(
             accion="ACCESO_DENEGADO",
             descripcion=f"Intentó acceder sin permiso al módulo {ruta_html}.",
             tabla_afectada="modulos_sistema",
-            id_registro_afectado=None
+            id_registro_afectado=None,
+            ip_equipo=ip_cliente,
+            navegador=navegador_cliente,
+            evitar_duplicado=True
         )
         db.commit()
 
@@ -1277,7 +1613,10 @@ def validar_modulo(
             accion="ACCESO_DENEGADO",
             descripcion=f"Intentó acceder sin permiso al módulo {ruta_html}.",
             tabla_afectada="modulos_sistema",
-            id_registro_afectado=permiso["id_modulo"]
+            id_registro_afectado=permiso["id_modulo"],
+            ip_equipo=ip_cliente,
+            navegador=navegador_cliente,
+            evitar_duplicado=True
         )
         db.commit()
 
@@ -1356,7 +1695,8 @@ def verificar_permiso_backend(
             accion="ACCESO_DENEGADO",
             descripcion=f"Intentó ejecutar {accion_requerida} en {ruta_html} sin permisos.",
             tabla_afectada="permisos_usuario",
-            id_registro_afectado=None
+            id_registro_afectado=None,
+            evitar_duplicado=True
         )
         db.commit()
 
