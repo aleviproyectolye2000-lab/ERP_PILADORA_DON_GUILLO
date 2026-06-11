@@ -5,6 +5,18 @@ from pydantic import BaseModel, Field
 from datetime import date, time, datetime
 from typing import Optional
 import re
+import hashlib
+import hmac
+
+try:
+    from passlib.context import CryptContext
+except Exception:
+    CryptContext = None
+
+try:
+    from werkzeug.security import check_password_hash as werkzeug_check_password_hash
+except Exception:
+    werkzeug_check_password_hash = None
 
 from app.database import get_db
 
@@ -114,6 +126,7 @@ class CambioSueldoCreate(BaseModel):
     clave_autorizacion: str
     usuario_autorizacion: str
     sueldo_anterior: Optional[float] = None
+    id_usuario_autorizacion: Optional[int] = None
 
 
 class AsistenciaCreate(BaseModel):
@@ -233,7 +246,7 @@ def asegurar_columnas_talento_humano(db: Session):
 
             db.execute(text("""
                 ALTER TABLE asistencia_empleados
-                ADD COLUMN IF NOT EXISTS hora_programada_entrada TIME;
+                ADD COLUMN IF NOT EXISTS hora_programada TIME;
             """))
 
             db.execute(text("""
@@ -243,8 +256,9 @@ def asegurar_columnas_talento_humano(db: Session):
 
             db.execute(text("""
                 UPDATE asistencia_empleados
-                SET valor_sancion = COALESCE(valor_sancion, sancion, 0)
-                WHERE valor_sancion IS NULL OR valor_sancion = 0;
+                SET valor_sancion = COALESCE(NULLIF(sancion, 0), 0)
+                WHERE COALESCE(valor_sancion, 0) = 0
+                  AND COALESCE(sancion, 0) > 0;
             """))
 
             db.execute(text("""
@@ -256,7 +270,7 @@ def asegurar_columnas_talento_humano(db: Session):
         if tabla_existe(db, "roles_pago"):
             db.execute(text("""
                 ALTER TABLE roles_pago
-                ADD COLUMN IF NOT EXISTS total_horas_extras NUMERIC(12,2) DEFAULT 0;
+                ADD COLUMN IF NOT EXISTS total_horas_extra NUMERIC(12,2) DEFAULT 0;
             """))
 
             db.execute(text("""
@@ -266,7 +280,7 @@ def asegurar_columnas_talento_humano(db: Session):
 
             db.execute(text("""
                 ALTER TABLE roles_pago
-                ADD COLUMN IF NOT EXISTS bonificacion_horas_extras NUMERIC(12,2) DEFAULT 0;
+                ADD COLUMN IF NOT EXISTS bonificacion_horas_extra NUMERIC(12,2) DEFAULT 0;
             """))
 
             db.execute(text("""
@@ -307,6 +321,20 @@ def asegurar_columnas_talento_humano(db: Session):
             db.execute(text("""
                 ALTER TABLE roles_pago
                 ADD COLUMN IF NOT EXISTS hora_extra_autorizada BOOLEAN DEFAULT FALSE;
+            """))
+
+            db.execute(text("""
+                UPDATE roles_pago
+                SET total_horas_extra = COALESCE(total_horas_extra, 0),
+                    valor_hora_extra = COALESCE(NULLIF(valor_hora_extra, 0), 10),
+                    bonificacion_horas_extra = COALESCE(bonificacion_horas_extra, horas_extras, 0),
+                    aporte_iess = COALESCE(aporte_iess, 0),
+                    porcentaje_iess = COALESCE(NULLIF(porcentaje_iess, 0), 9.45),
+                    otros_descuentos = COALESCE(otros_descuentos, 0),
+                    total_ingresos = COALESCE(total_ingresos, 0),
+                    total_descuentos = COALESCE(total_descuentos, 0),
+                    neto_pagar = COALESCE(neto_pagar, total_pagar, 0)
+                WHERE estado = TRUE;
             """))
 
         db.execute(text("""
@@ -629,21 +657,81 @@ def calcular_valor_sancion(sueldo: float, porcentaje_sancion: float) -> float:
 
 
 # ============================================================
-# VALIDACIÓN DE AUTORIZACIÓN ADMINISTRATIVA
+# VALIDACIÓN DE CLAVE / AUTORIZACIÓN ADMINISTRATIVA
 # ============================================================
+
+def verificar_clave_usuario(clave_ingresada: str, contrasena_hash_bd: str) -> bool:
+    clave_ingresada = limpiar_texto(clave_ingresada)
+    contrasena_hash_bd = str(contrasena_hash_bd or "").strip()
+
+    if clave_ingresada == "" or contrasena_hash_bd == "":
+        return False
+
+    if hmac.compare_digest(contrasena_hash_bd, clave_ingresada):
+        return True
+
+    try:
+        sha256 = hashlib.sha256(clave_ingresada.encode("utf-8")).hexdigest()
+        if hmac.compare_digest(contrasena_hash_bd, sha256):
+            return True
+    except Exception:
+        pass
+
+    try:
+        sha512 = hashlib.sha512(clave_ingresada.encode("utf-8")).hexdigest()
+        if hmac.compare_digest(contrasena_hash_bd, sha512):
+            return True
+    except Exception:
+        pass
+
+    try:
+        md5 = hashlib.md5(clave_ingresada.encode("utf-8")).hexdigest()
+        if hmac.compare_digest(contrasena_hash_bd, md5):
+            return True
+    except Exception:
+        pass
+
+    if werkzeug_check_password_hash is not None:
+        try:
+            if werkzeug_check_password_hash(contrasena_hash_bd, clave_ingresada):
+                return True
+        except Exception:
+            pass
+
+    if CryptContext is not None:
+        try:
+            pwd_context = CryptContext(
+                schemes=["bcrypt", "pbkdf2_sha256", "argon2"],
+                deprecated="auto"
+            )
+
+            if pwd_context.verify(clave_ingresada, contrasena_hash_bd):
+                return True
+        except Exception:
+            pass
+
+    return False
+
 
 def validar_autorizacion_admin(
     db: Session,
     usuario_autorizacion: str,
-    clave_autorizacion: str
+    clave_autorizacion: str,
+    id_usuario_autorizacion: Optional[int] = None
 ):
     usuario_autorizacion = limpiar_texto(usuario_autorizacion)
     clave_autorizacion = limpiar_texto(clave_autorizacion)
 
-    if usuario_autorizacion == "" or clave_autorizacion == "":
+    if usuario_autorizacion == "" and id_usuario_autorizacion is None:
         raise HTTPException(
             status_code=401,
-            detail="Debe ingresar usuario y clave de autorización."
+            detail="No se pudo identificar el usuario en sesión para autorizar la acción."
+        )
+
+    if clave_autorizacion == "":
+        raise HTTPException(
+            status_code=401,
+            detail="Debe ingresar la contraseña del usuario en sesión."
         )
 
     if not tabla_existe(db, "usuarios"):
@@ -652,145 +740,72 @@ def validar_autorizacion_admin(
             detail="No existe la tabla usuarios para validar la autorización."
         )
 
-    columnas_usuarios = obtener_columnas_tabla(db, "usuarios")
-
-    columna_usuario = primera_columna_existente(
-        columnas_usuarios,
-        ["usuario", "nombre_usuario", "username", "correo", "email"]
-    )
-
-    columna_clave = primera_columna_existente(
-        columnas_usuarios,
-        ["clave", "contrasena", "contraseña", "password", "clave_acceso"]
-    )
-
-    columna_perfil_directa = primera_columna_existente(
-        columnas_usuarios,
-        ["perfil", "rol", "tipo_usuario", "tipo_perfil"]
-    )
-
-    columna_id_perfil = primera_columna_existente(
-        columnas_usuarios,
-        ["id_perfil", "perfil_id"]
-    )
-
-    if columna_usuario is None or columna_clave is None:
+    if not tabla_existe(db, "perfiles"):
         raise HTTPException(
             status_code=500,
-            detail="No se pudo identificar las columnas de usuario y clave en la tabla usuarios."
+            detail="No existe la tabla perfiles para validar la autorización."
         )
 
-    perfil_usuario = None
-
-    if columna_perfil_directa is not None:
-        consulta = text(f"""
-            SELECT {columna_usuario} AS usuario,
-                   {columna_clave} AS clave,
-                   {columna_perfil_directa} AS perfil
-            FROM usuarios
-            WHERE {columna_usuario} = :usuario
-            LIMIT 1;
-        """)
-
+    if id_usuario_autorizacion is not None:
         fila = db.execute(
-            consulta,
-            {"usuario": usuario_autorizacion}
-        ).mappings().first()
-
-        if fila is None:
-            raise HTTPException(
-                status_code=401,
-                detail="Usuario de autorización no encontrado."
-            )
-
-        clave_bd = str(fila["clave"])
-        perfil_usuario = str(fila["perfil"] or "")
-
-    elif columna_id_perfil is not None and tabla_existe(db, "perfiles"):
-        columnas_perfiles = obtener_columnas_tabla(db, "perfiles")
-
-        columna_nombre_perfil = primera_columna_existente(
-            columnas_perfiles,
-            ["nombre_perfil", "perfil", "nombre", "descripcion"]
-        )
-
-        columna_id_perfil_tabla = primera_columna_existente(
-            columnas_perfiles,
-            ["id_perfil", "perfil_id", "id"]
-        )
-
-        if columna_nombre_perfil is not None and columna_id_perfil_tabla is not None:
-            consulta = text(f"""
-                SELECT u.{columna_usuario} AS usuario,
-                       u.{columna_clave} AS clave,
-                       p.{columna_nombre_perfil} AS perfil
+            text("""
+                SELECT
+                    u.id_usuario,
+                    u.usuario,
+                    u.correo,
+                    u.contrasena_hash,
+                    u.estado,
+                    p.nombre_perfil
                 FROM usuarios u
-                LEFT JOIN perfiles p ON u.{columna_id_perfil} = p.{columna_id_perfil_tabla}
-                WHERE u.{columna_usuario} = :usuario
+                LEFT JOIN perfiles p ON u.id_perfil = p.id_perfil
+                WHERE u.id_usuario = :id_usuario
                 LIMIT 1;
-            """)
-
-            fila = db.execute(
-                consulta,
-                {"usuario": usuario_autorizacion}
-            ).mappings().first()
-
-            if fila is None:
-                raise HTTPException(
-                    status_code=401,
-                    detail="Usuario de autorización no encontrado."
-                )
-
-            clave_bd = str(fila["clave"])
-            perfil_usuario = str(fila["perfil"] or "")
-        else:
-            fila = db.execute(
-                text(f"""
-                    SELECT {columna_usuario} AS usuario,
-                           {columna_clave} AS clave
-                    FROM usuarios
-                    WHERE {columna_usuario} = :usuario
-                    LIMIT 1;
-                """),
-                {"usuario": usuario_autorizacion}
-            ).mappings().first()
-
-            if fila is None:
-                raise HTTPException(
-                    status_code=401,
-                    detail="Usuario de autorización no encontrado."
-                )
-
-            clave_bd = str(fila["clave"])
-            perfil_usuario = ""
+            """),
+            {"id_usuario": id_usuario_autorizacion}
+        ).mappings().first()
     else:
         fila = db.execute(
-            text(f"""
-                SELECT {columna_usuario} AS usuario,
-                       {columna_clave} AS clave
-                FROM usuarios
-                WHERE {columna_usuario} = :usuario
+            text("""
+                SELECT
+                    u.id_usuario,
+                    u.usuario,
+                    u.correo,
+                    u.contrasena_hash,
+                    u.estado,
+                    p.nombre_perfil
+                FROM usuarios u
+                LEFT JOIN perfiles p ON u.id_perfil = p.id_perfil
+                WHERE
+                    u.usuario = :usuario
+                    OR u.correo = :usuario
+                    OR CONCAT(COALESCE(u.nombres, ''), ' ', COALESCE(u.apellidos, '')) = :usuario
+                    OR CAST(u.id_usuario AS TEXT) = :usuario
                 LIMIT 1;
             """),
             {"usuario": usuario_autorizacion}
         ).mappings().first()
 
-        if fila is None:
-            raise HTTPException(
-                status_code=401,
-                detail="Usuario de autorización no encontrado."
-            )
-
-        clave_bd = str(fila["clave"])
-        perfil_usuario = ""
-
-    if clave_bd != clave_autorizacion:
+    if fila is None:
         raise HTTPException(
             status_code=401,
-            detail="Clave de autorización incorrecta."
+            detail="Usuario de autorización no encontrado."
         )
 
-    perfil_normalizado = perfil_usuario.lower().strip()
+    if fila["estado"] is not True:
+        raise HTTPException(
+            status_code=403,
+            detail="El usuario de autorización está inactivo."
+        )
+
+    contrasena_hash_bd = fila["contrasena_hash"]
+
+    if not verificar_clave_usuario(clave_autorizacion, contrasena_hash_bd):
+        raise HTTPException(
+            status_code=401,
+            detail="Contraseña de autorización incorrecta."
+        )
+
+    perfil_usuario = limpiar_texto(fila["nombre_perfil"]).lower()
 
     perfiles_autorizados = [
         "administrador",
@@ -802,16 +817,19 @@ def validar_autorizacion_admin(
         "superadmin"
     ]
 
-    if perfil_normalizado != "":
-        es_autorizado = any(perfil in perfil_normalizado for perfil in perfiles_autorizados)
+    es_autorizado = any(perfil in perfil_usuario for perfil in perfiles_autorizados)
 
-        if not es_autorizado:
-            raise HTTPException(
-                status_code=403,
-                detail="Solo un usuario Administrador o Gerente puede autorizar esta acción."
-            )
+    if not es_autorizado:
+        raise HTTPException(
+            status_code=403,
+            detail="Solo un usuario Administrador o Gerente puede autorizar esta acción."
+        )
 
-    return True
+    return {
+        "id_usuario": fila["id_usuario"],
+        "usuario": fila["usuario"],
+        "perfil": fila["nombre_perfil"]
+    }
 
 
 # ============================================================
@@ -1073,10 +1091,11 @@ def cambiar_sueldo_empleado(
 ):
     asegurar_columnas_talento_humano(db)
 
-    validar_autorizacion_admin(
+    autorizacion = validar_autorizacion_admin(
         db=db,
         usuario_autorizacion=cambio.usuario_autorizacion,
-        clave_autorizacion=cambio.clave_autorizacion
+        clave_autorizacion=cambio.clave_autorizacion,
+        id_usuario_autorizacion=cambio.id_usuario_autorizacion
     )
 
     motivo = limpiar_texto(cambio.motivo)
@@ -1163,7 +1182,7 @@ def cambiar_sueldo_empleado(
                 "sueldo_anterior": sueldo_anterior,
                 "sueldo_nuevo": sueldo_nuevo,
                 "motivo": motivo,
-                "usuario_autorizacion": limpiar_texto(cambio.usuario_autorizacion)
+                "usuario_autorizacion": autorizacion["usuario"]
             }
         )
 
@@ -1173,6 +1192,8 @@ def cambiar_sueldo_empleado(
             "mensaje": "Sueldo modificado correctamente con autorización administrativa.",
             "sueldo_anterior": sueldo_anterior,
             "sueldo_nuevo": sueldo_nuevo,
+            "autorizado_por": autorizacion["usuario"],
+            "perfil_autorizacion": autorizacion["perfil"],
             "empleado": dict(empleado_actualizado)
         }
 
@@ -1476,7 +1497,7 @@ def marcar_entrada(asistencia: MarcarEntradaCreate, db: Session = Depends(get_db
             id_empleado,
             fecha,
             hora_entrada,
-            hora_programada_entrada,
+            hora_programada,
             estado_asistencia,
             minutos_atraso,
             sancion,
@@ -1490,7 +1511,7 @@ def marcar_entrada(asistencia: MarcarEntradaCreate, db: Session = Depends(get_db
             :id_empleado,
             :fecha,
             :hora_entrada,
-            :hora_programada_entrada,
+            :hora_programada,
             :estado_asistencia,
             :minutos_atraso,
             :sancion,
@@ -1505,7 +1526,7 @@ def marcar_entrada(asistencia: MarcarEntradaCreate, db: Session = Depends(get_db
             id_empleado,
             fecha,
             hora_entrada,
-            hora_programada_entrada,
+            hora_programada,
             estado_asistencia,
             minutos_atraso,
             sancion,
@@ -1523,7 +1544,7 @@ def marcar_entrada(asistencia: MarcarEntradaCreate, db: Session = Depends(get_db
                 "id_empleado": asistencia.id_empleado,
                 "fecha": fecha_asistencia,
                 "hora_entrada": hora_entrada,
-                "hora_programada_entrada": asistencia.hora_programada_entrada,
+                "hora_programada": asistencia.hora_programada_entrada,
                 "estado_asistencia": estado_asistencia,
                 "minutos_atraso": minutos_atraso,
                 "sancion": valor_sancion,
@@ -1785,12 +1806,13 @@ def listar_asistencia(db: Session = Depends(get_db)):
                 a.fecha,
                 a.hora_entrada,
                 a.hora_salida,
+                a.hora_programada,
                 a.estado_asistencia,
                 a.minutos_atraso,
                 COALESCE(a.sancion_porcentaje, 0) AS sancion_porcentaje,
                 COALESCE(a.sancion_porcentaje, 0) AS porcentaje_sancion,
-                COALESCE(a.valor_sancion, a.sancion, 0) AS valor_sancion,
-                COALESCE(a.valor_sancion, a.sancion, 0) AS sancion,
+                COALESCE(NULLIF(a.valor_sancion, 0), NULLIF(a.sancion, 0), 0) AS valor_sancion,
+                COALESCE(NULLIF(a.valor_sancion, 0), NULLIF(a.sancion, 0), 0) AS sancion,
                 a.horas_trabajadas,
                 a.horas_extras,
                 a.observacion
@@ -1827,7 +1849,7 @@ def calcular_rol_pago_mensual(
         text("""
             SELECT
                 COALESCE(SUM(horas_extras), 0) AS total_horas_extras,
-                COALESCE(SUM(COALESCE(valor_sancion, sancion, 0)), 0) AS total_sanciones
+                COALESCE(SUM(COALESCE(NULLIF(valor_sancion, 0), NULLIF(sancion, 0), 0)), 0) AS total_sanciones
             FROM asistencia_empleados
             WHERE id_empleado = :id_empleado
               AND fecha >= TO_DATE(:periodo || '-01', 'YYYY-MM-DD')
@@ -1853,6 +1875,18 @@ def calcular_rol_pago_mensual(
     bonificacion_horas_extras = redondear(total_horas_extras * valor_hora_extra)
     bonificaciones = redondear(bonificaciones)
     otros_descuentos = redondear(otros_descuentos)
+
+    if bonificaciones < 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Las bonificaciones adicionales no pueden ser negativas."
+        )
+
+    if otros_descuentos < 0:
+        raise HTTPException(
+            status_code=400,
+            detail="Los otros descuentos no pueden ser negativos."
+        )
 
     aporte_iess = redondear((sueldo_base * PORCENTAJE_IESS_EMPLEADO) / 100)
 
@@ -1944,11 +1978,12 @@ def crear_rol_pago(rol: RolPagoCreate, db: Session = Depends(get_db)):
     validar_periodo(rol.periodo)
 
     valor_hora_extra = redondear(rol.valor_hora_extra or VALOR_HORA_EXTRA_DEFECTO)
-
     cambio_valor_hora_extra = valor_hora_extra != redondear(VALOR_HORA_EXTRA_DEFECTO)
 
+    autorizacion_hora_extra = None
+
     if cambio_valor_hora_extra:
-        validar_autorizacion_admin(
+        autorizacion_hora_extra = validar_autorizacion_admin(
             db=db,
             usuario_autorizacion=rol.usuario_autorizacion_hora_extra or "",
             clave_autorizacion=rol.clave_autorizacion_hora_extra or ""
@@ -1997,9 +2032,9 @@ def crear_rol_pago(rol: RolPagoCreate, db: Session = Depends(get_db)):
             sanciones,
             descuentos,
             observacion,
-            total_horas_extras,
+            total_horas_extra,
             valor_hora_extra,
-            bonificacion_horas_extras,
+            bonificacion_horas_extra,
             aporte_iess,
             porcentaje_iess,
             otros_descuentos,
@@ -2018,9 +2053,9 @@ def crear_rol_pago(rol: RolPagoCreate, db: Session = Depends(get_db)):
             :sanciones,
             :descuentos,
             :observacion,
-            :total_horas_extras,
+            :total_horas_extra,
             :valor_hora_extra,
-            :bonificacion_horas_extras,
+            :bonificacion_horas_extra,
             :aporte_iess,
             :porcentaje_iess,
             :otros_descuentos,
@@ -2039,9 +2074,9 @@ def crear_rol_pago(rol: RolPagoCreate, db: Session = Depends(get_db)):
             bonificaciones,
             sanciones,
             descuentos,
-            total_horas_extras,
+            total_horas_extra,
             valor_hora_extra,
-            bonificacion_horas_extras,
+            bonificacion_horas_extra,
             aporte_iess,
             porcentaje_iess,
             otros_descuentos,
@@ -2060,16 +2095,16 @@ def crear_rol_pago(rol: RolPagoCreate, db: Session = Depends(get_db)):
         "sanciones": calculo["sanciones"],
         "descuentos": calculo["descuentos_guardar"],
         "observacion": limpiar_texto(rol.observacion) or "Rol generado automáticamente desde Talento Humano.",
-        "total_horas_extras": calculo["total_horas_extras"],
+        "total_horas_extra": calculo["total_horas_extras"],
         "valor_hora_extra": calculo["valor_hora_extra"],
-        "bonificacion_horas_extras": calculo["bonificacion_horas_extras"],
+        "bonificacion_horas_extra": calculo["bonificacion_horas_extras"],
         "aporte_iess": calculo["aporte_iess"],
         "porcentaje_iess": calculo["porcentaje_iess"],
         "otros_descuentos": calculo["otros_descuentos"],
         "total_ingresos": calculo["total_ingresos"],
         "total_descuentos": calculo["total_descuentos"],
         "neto_pagar": calculo["neto_pagar"],
-        "usuario_autorizacion_hora_extra": rol.usuario_autorizacion_hora_extra if cambio_valor_hora_extra else None,
+        "usuario_autorizacion_hora_extra": autorizacion_hora_extra["usuario"] if autorizacion_hora_extra else None,
         "hora_extra_autorizada": cambio_valor_hora_extra
     }
 
@@ -2129,9 +2164,9 @@ def listar_roles_pago(db: Session = Depends(get_db)):
                 e.area,
                 rp.periodo,
                 rp.sueldo_base,
-                COALESCE(rp.total_horas_extras, 0) AS total_horas_extras,
+                COALESCE(rp.total_horas_extra, 0) AS total_horas_extras,
                 COALESCE(rp.valor_hora_extra, 10) AS valor_hora_extra,
-                COALESCE(rp.bonificacion_horas_extras, rp.horas_extras, 0) AS bonificacion_horas_extras,
+                COALESCE(rp.bonificacion_horas_extra, rp.horas_extras, 0) AS bonificacion_horas_extras,
                 COALESCE(rp.horas_extras, 0) AS horas_extras,
                 COALESCE(rp.bonificaciones, 0) AS bonificaciones,
                 COALESCE(rp.sanciones, 0) AS sanciones,
@@ -2140,15 +2175,45 @@ def listar_roles_pago(db: Session = Depends(get_db)):
                 COALESCE(rp.otros_descuentos, 0) AS otros_descuentos,
                 COALESCE(rp.descuentos, 0) AS descuentos,
                 COALESCE(
-                    rp.total_ingresos,
-                    COALESCE(rp.sueldo_base, 0) + COALESCE(rp.horas_extras, 0) + COALESCE(rp.bonificaciones, 0)
+                    NULLIF(rp.total_ingresos, 0),
+                    COALESCE(rp.sueldo_base, 0) + COALESCE(rp.bonificacion_horas_extra, rp.horas_extras, 0) + COALESCE(rp.bonificaciones, 0)
                 ) AS total_ingresos,
                 COALESCE(
-                    rp.total_descuentos,
-                    COALESCE(rp.sanciones, 0) + COALESCE(rp.descuentos, 0)
+                    NULLIF(rp.total_descuentos, 0),
+                    COALESCE(rp.sanciones, 0) + COALESCE(rp.aporte_iess, 0) + COALESCE(rp.otros_descuentos, 0)
                 ) AS total_descuentos,
-                COALESCE(rp.neto_pagar, rp.total_pagar, 0) AS neto_pagar,
-                COALESCE(rp.total_pagar, rp.neto_pagar, 0) AS total_pagar,
+                COALESCE(
+                    NULLIF(rp.neto_pagar, 0),
+                    NULLIF(rp.total_pagar, 0),
+                    (
+                        COALESCE(rp.sueldo_base, 0)
+                        + COALESCE(rp.bonificacion_horas_extra, rp.horas_extras, 0)
+                        + COALESCE(rp.bonificaciones, 0)
+                    )
+                    -
+                    (
+                        COALESCE(rp.sanciones, 0)
+                        + COALESCE(rp.aporte_iess, 0)
+                        + COALESCE(rp.otros_descuentos, 0)
+                    )
+                ) AS neto_pagar,
+                COALESCE(
+                    NULLIF(rp.total_pagar, 0),
+                    NULLIF(rp.neto_pagar, 0),
+                    (
+                        COALESCE(rp.sueldo_base, 0)
+                        + COALESCE(rp.bonificacion_horas_extra, rp.horas_extras, 0)
+                        + COALESCE(rp.bonificaciones, 0)
+                    )
+                    -
+                    (
+                        COALESCE(rp.sanciones, 0)
+                        + COALESCE(rp.aporte_iess, 0)
+                        + COALESCE(rp.otros_descuentos, 0)
+                    )
+                ) AS total_pagar,
+                rp.usuario_autorizacion_hora_extra,
+                rp.hora_extra_autorizada,
                 rp.observacion,
                 rp.fecha_generacion
             FROM roles_pago rp
