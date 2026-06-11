@@ -10,7 +10,137 @@
       rel="stylesheet"
     />
     <link rel="stylesheet" href="css/style.css" />
+
+    <style>
+      .activos-hero {
+        min-height: 68vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      .activos-panel {
+        border: 0;
+        border-radius: 24px;
+        overflow: hidden;
+        background: linear-gradient(135deg, #ffffff 0%, #f3fff8 100%);
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.08);
+      }
+
+      .activos-panel-header {
+        background: linear-gradient(135deg, #198754 0%, #0f5132 100%);
+        color: #ffffff;
+        padding: 28px;
+      }
+
+      .activos-badge {
+        display: inline-block;
+        padding: 8px 16px;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.18);
+        color: #ffffff;
+        font-size: 0.86rem;
+        font-weight: 700;
+        letter-spacing: 0.3px;
+        margin-bottom: 14px;
+      }
+
+      .activos-icono-principal {
+        width: 120px;
+        height: 120px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #e7f6ee;
+        color: #198754;
+        font-size: 58px;
+        margin: 0 auto 20px auto;
+        box-shadow: inset 0 0 0 8px #d1e7dd;
+      }
+
+      .activos-card-info {
+        border: 1px solid #dceee4;
+        border-left: 5px solid #198754;
+        border-radius: 14px;
+        background: #ffffff;
+        padding: 18px;
+        height: 100%;
+      }
+
+      .activos-card-info.warning {
+        border-left-color: #ffc107;
+      }
+
+      .activos-card-info.info {
+        border-left-color: #0dcaf0;
+      }
+
+      .activos-card-info.secondary {
+        border-left-color: #6c757d;
+      }
+
+      .activos-card-info h6 {
+        font-weight: 800;
+        margin-bottom: 8px;
+      }
+
+      .activos-card-info p {
+        margin-bottom: 0;
+        font-size: 0.88rem;
+        color: #5c636a;
+      }
+
+      .activos-lista-futuro {
+        background: #ffffff;
+        border: 1px solid #dceee4;
+        border-radius: 14px;
+        padding: 18px;
+      }
+
+      .activos-lista-futuro li {
+        margin-bottom: 9px;
+      }
+
+      .activos-estado {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: #fff3cd;
+        color: #664d03;
+        border: 1px solid #ffecb5;
+        border-radius: 999px;
+        padding: 8px 14px;
+        font-weight: 700;
+        font-size: 0.88rem;
+      }
+
+      .activos-divider {
+        height: 1px;
+        background: #dceee4;
+        margin: 22px 0;
+      }
+
+      .btn-activos-volver {
+        border-radius: 999px;
+        padding-left: 22px;
+        padding-right: 22px;
+      }
+
+      @media (max-width: 768px) {
+        .activos-panel-header {
+          padding: 22px;
+        }
+
+        .activos-icono-principal {
+          width: 96px;
+          height: 96px;
+          font-size: 46px;
+        }
+      }
+    </style>
   </head>
+
   <body>
     <div class="d-flex">
       <aside class="sidebar">
@@ -22,7 +152,7 @@
         <a href="produccion.html" class="sidebar-link">Producción</a>
         <a href="ventas.html" class="sidebar-link">Ventas</a>
         <a href="talento_humano.html" class="sidebar-link">Talento Humano</a>
-        <a href="auditoria.html" class="sidebar-link active">Auditoría</a>
+        <a href="auditoria.html" class="sidebar-link">Auditoría</a>
         <a href="seguridad.html" class="sidebar-link">Seguridad y Usuarios</a>
         <a href="activos.html" class="sidebar-link active">Activos</a>
         <a href="reportes.html" class="sidebar-link">Reportes e IA</a>
@@ -35,12 +165,9 @@
       <main class="content">
         <div class="d-flex justify-content-between align-items-center mb-4">
           <div>
-            <h2 class="fw-bold text-success">
-              Maquinaria, Vehículos y Activos
-            </h2>
+            <h2 class="fw-bold text-success">Maquinaria, Vehículos y Activos</h2>
             <p class="text-muted mb-0">
-              Control de activos, mantenimientos y recursos físicos de la
-              piladora.
+              Módulo planificado para el control futuro de bienes físicos de la piladora.
             </p>
           </div>
 
@@ -50,258 +177,128 @@
           </div>
         </div>
 
-        <div class="row g-4 mb-4">
-          <div class="col-md-3">
-            <div class="card dashboard-card shadow-sm">
-              <div class="card-body">
-                <h6 class="text-muted">Activos registrados</h6>
-                <h3 class="fw-bold text-success" id="totalActivos">0</h3>
-                <small>Maquinaria y bienes</small>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-md-3">
-            <div class="card dashboard-card shadow-sm">
-              <div class="card-body">
-                <h6 class="text-muted">En mantenimiento</h6>
-                <h3 class="fw-bold text-warning" id="totalMantenimiento">0</h3>
-                <small>Activos detenidos</small>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-md-3">
-            <div class="card dashboard-card shadow-sm">
-              <div class="card-body">
-                <h6 class="text-muted">Activos dañados</h6>
-                <h3 class="fw-bold text-danger" id="totalDanados">0</h3>
-                <small>Requieren revisión</small>
-              </div>
-            </div>
-          </div>
-
-          <div class="col-md-3">
-            <div class="card dashboard-card shadow-sm">
-              <div class="card-body">
-                <h6 class="text-muted">Valor total</h6>
-                <h3 class="fw-bold text-success" id="valorTotalActivos">
-                  $ 0.00
-                </h3>
-                <small>Valor estimado</small>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="card shadow-sm mb-4">
-          <div class="card-body">
-            <h5 class="text-success fw-bold mb-3">Registrar activo</h5>
-
-            <form id="formActivos" class="row g-3">
-              <div class="col-md-3">
-                <label class="form-label">Código del activo</label>
-                <input
-                  type="text"
-                  class="form-control"
-                  id="codigoActivo"
-                  placeholder="Ejemplo: ACT-001"
-                  required
-                />
+        <section class="activos-hero">
+          <div class="container-fluid px-0">
+            <div class="card activos-panel">
+              <div class="activos-panel-header text-center">
+                <span class="activos-badge">MÓDULO PLANIFICADO A FUTURO</span>
+                <h1 class="fw-bold mb-2">Activos no disponible por el momento</h1>
+                <p class="mb-0">
+                  Esta sección forma parte de la planificación futura del ERP Piladora Don Guillo.
+                  Actualmente el sistema se encuentra enfocado en los módulos operativos principales.
+                </p>
               </div>
 
-              <div class="col-md-4">
-                <label class="form-label">Nombre del activo</label>
-                <input
-                  type="text"
-                  class="form-control"
-                  id="nombreActivo"
-                  placeholder="Ejemplo: Piladora principal"
-                  required
-                />
+              <div class="card-body p-4 p-md-5">
+                <div class="row align-items-center g-4">
+                  <div class="col-lg-4 text-center">
+                    <div class="activos-icono-principal">🏗️</div>
+
+                    <div class="activos-estado">
+                      <span>⏳</span>
+                      <span>En espera de implementación</span>
+                    </div>
+                  </div>
+
+                  <div class="col-lg-8">
+                    <h3 class="fw-bold text-success mb-3">
+                      Este módulo será habilitado en una siguiente fase
+                    </h3>
+
+                    <p class="text-muted mb-3">
+                      El módulo de Activos permitirá administrar maquinaria, vehículos,
+                      terrenos, herramientas, equipos, mantenimientos y costos relacionados
+                      con los recursos físicos de la piladora.
+                    </p>
+
+                    <p class="text-muted mb-0">
+                      Por ahora no se encuentra activo para registros, edición ni eliminación,
+                      con el fin de mantener estable la versión actual del ERP en producción.
+                    </p>
+
+                    <div class="activos-divider"></div>
+
+                    <div class="d-flex flex-wrap gap-2">
+                      <a href="dashboard.html" class="btn btn-success btn-activos-volver">
+                        Volver al panel principal
+                      </a>
+
+                      <a href="reportes.html" class="btn btn-outline-success btn-activos-volver">
+                        Ir a Reportes e IA
+                      </a>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row g-3 mt-4">
+                  <div class="col-md-3">
+                    <div class="activos-card-info">
+                      <h6 class="text-success">Maquinaria</h6>
+                      <p>
+                        Registro de piladoras, secadoras, motores, elevadores y equipos de producción.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="col-md-3">
+                    <div class="activos-card-info warning">
+                      <h6 class="text-warning">Mantenimiento</h6>
+                      <p>
+                        Control de mantenimientos preventivos, correctivos, costos y próximas revisiones.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="col-md-3">
+                    <div class="activos-card-info info">
+                      <h6 class="text-info">Vehículos</h6>
+                      <p>
+                        Seguimiento de camiones, camionetas, gastos, combustible y estado operativo.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div class="col-md-3">
+                    <div class="activos-card-info secondary">
+                      <h6 class="text-secondary">Bienes físicos</h6>
+                      <p>
+                        Administración futura de bodegas, terrenos, herramientas y equipos auxiliares.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div class="row g-4 mt-4">
+                  <div class="col-lg-7">
+                    <div class="activos-lista-futuro">
+                      <h5 class="fw-bold text-success mb-3">
+                        Funciones previstas para una próxima versión
+                      </h5>
+
+                      <ul class="mb-0 text-muted">
+                        <li>Registro de activos con código, responsable, ubicación y valor estimado.</li>
+                        <li>Control de estado: operativo, en mantenimiento, dañado o inactivo.</li>
+                        <li>Historial de mantenimientos y costos asociados.</li>
+                        <li>Alertas de próximos mantenimientos preventivos.</li>
+                        <li>Reportes para gerencia sobre inversión, gastos y disponibilidad de activos.</li>
+                      </ul>
+                    </div>
+                  </div>
+
+                  <div class="col-lg-5">
+                    <div class="alert alert-success h-100 mb-0 d-flex align-items-center">
+                      <div>
+                        <h5 class="fw-bold mb-2">Estado actual del ERP</h5>
+                        <p class="mb-0">
+                          El módulo queda visualmente reservado para desarrollo futuro.
+                          No se ejecutan registros ni procesos internos de activos en esta versión,
+                          evitando errores o datos incompletos en producción.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-
-              <div class="col-md-3">
-                <label class="form-label">Tipo de activo</label>
-                <select class="form-select" id="tipoActivo" required>
-                  <option value="">Seleccione</option>
-                  <option value="Maquinaria">Maquinaria</option>
-                  <option value="Vehículo">Vehículo</option>
-                  <option value="Terreno">Terreno</option>
-                  <option value="Bodega">Bodega</option>
-                  <option value="Herramienta">Herramienta</option>
-                  <option value="Equipo">Equipo</option>
-                </select>
-              </div>
-
-              <div class="col-md-2">
-                <label class="form-label">Estado</label>
-                <select class="form-select" id="estadoActivo" required>
-                  <option value="">Seleccione</option>
-                  <option value="Operativo">Operativo</option>
-                  <option value="Mantenimiento">Mantenimiento</option>
-                  <option value="Dañado">Dañado</option>
-                  <option value="Inactivo">Inactivo</option>
-                </select>
-              </div>
-
-              <div class="col-md-3">
-                <label class="form-label">Fecha adquisición</label>
-                <input
-                  type="date"
-                  class="form-control"
-                  id="fechaAdquisicionActivo"
-                  required
-                />
-              </div>
-
-              <div class="col-md-3">
-                <label class="form-label">Valor estimado</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  class="form-control"
-                  id="valorActivo"
-                  required
-                />
-              </div>
-
-              <div class="col-md-3">
-                <label class="form-label">Responsable</label>
-                <input
-                  type="text"
-                  class="form-control"
-                  id="responsableActivo"
-                  required
-                />
-              </div>
-
-              <div class="col-md-3">
-                <label class="form-label">Ubicación</label>
-                <input
-                  type="text"
-                  class="form-control"
-                  id="ubicacionActivo"
-                  placeholder="Ejemplo: Área de producción"
-                />
-              </div>
-
-              <div class="col-md-3">
-                <label class="form-label">Último mantenimiento</label>
-                <input
-                  type="date"
-                  class="form-control"
-                  id="ultimoMantenimientoActivo"
-                />
-              </div>
-
-              <div class="col-md-3">
-                <label class="form-label">Próximo mantenimiento</label>
-                <input
-                  type="date"
-                  class="form-control"
-                  id="proximoMantenimientoActivo"
-                />
-              </div>
-
-              <div class="col-md-3">
-                <label class="form-label">Costo mantenimiento</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  class="form-control"
-                  id="costoMantenimientoActivo"
-                  value="0"
-                />
-              </div>
-
-              <div class="col-md-3">
-                <label class="form-label">Combustible/Gasto</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  class="form-control"
-                  id="gastoCombustibleActivo"
-                  value="0"
-                />
-              </div>
-
-              <div class="col-md-12">
-                <label class="form-label">Descripción u observación</label>
-                <textarea
-                  class="form-control"
-                  id="descripcionActivo"
-                  rows="2"
-                ></textarea>
-              </div>
-
-              <div class="col-md-12">
-                <button type="submit" class="btn btn-success">
-                  Registrar activo
-                </button>
-                <button type="reset" class="btn btn-secondary">Limpiar</button>
-              </div>
-            </form>
-          </div>
-        </div>
-
-        <section class="mt-4">
-          <div class="card shadow-sm">
-            <div class="card-header bg-success text-white">
-              <h5 class="mb-0">Activos registrados</h5>
-            </div>
-
-            <div class="card-body table-responsive">
-              <table class="table table-bordered table-hover align-middle">
-                <thead class="table-success">
-                  <tr>
-                    <th>ID</th>
-                    <th>Código</th>
-                    <th>Activo</th>
-                    <th>Tipo</th>
-                    <th>Valor</th>
-                    <th>Responsable</th>
-                    <th>Ubicación</th>
-                    <th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody id="tablaActivos">
-                  <tr>
-                    <td colspan="8" class="text-center">Cargando activos...</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-        <section class="mt-4">
-          <div class="card shadow-sm">
-            <div class="card-header bg-success text-white">
-              <h5 class="mb-0">Mantenimientos registrados</h5>
-            </div>
-
-            <div class="card-body table-responsive">
-              <table class="table table-bordered table-hover align-middle">
-                <thead class="table-success">
-                  <tr>
-                    <th>ID</th>
-                    <th>Activo</th>
-                    <th>Tipo mantenimiento</th>
-                    <th>Fecha</th>
-                    <th>Costo</th>
-                    <th>Combustible</th>
-                    <th>Próximo mantenimiento</th>
-                    <th>Responsable</th>
-                  </tr>
-                </thead>
-                <tbody id="tablaMantenimientos">
-                  <tr>
-                    <td colspan="8" class="text-center">
-                      Cargando mantenimientos...
-                    </td>
-                  </tr>
-                </tbody>
-              </table>
             </div>
           </div>
         </section>
