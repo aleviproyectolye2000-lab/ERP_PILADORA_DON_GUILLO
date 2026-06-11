@@ -1,13 +1,15 @@
 /* ---------------------------------------------------- */
 /* SEGURIDAD Y USUARIOS - ERP PILADORA DON GUILLO       */
 /* Gestión de usuarios, perfiles, módulos y permisos    */
-/* Validaciones reforzadas y protección de administrador */
+/* Validaciones reforzadas y reglas por perfil          */
 /* ---------------------------------------------------- */
 
 let usuariosSeguridad = [];
 let perfilesSeguridad = [];
 let modulosSeguridad = [];
 let permisosUsuarioSeleccionado = [];
+
+const API_SEGURIDAD_RENDER = "https://erp-piladora-don-guillo.onrender.com";
 
 /* ---------------------------------------------------- */
 /* CONSUMO DE API                                       */
@@ -18,7 +20,7 @@ async function seguridadApiGet(ruta) {
     return await window.apiGet(ruta);
   }
 
-  const respuesta = await fetch(`https://erp-piladora-don-guillo.onrender.com${ruta}`);
+  const respuesta = await fetch(`${API_SEGURIDAD_RENDER}${ruta}`);
   const datos = await respuesta.json();
 
   if (!respuesta.ok) {
@@ -33,7 +35,7 @@ async function seguridadApiPost(ruta, datos) {
     return await window.apiPost(ruta, datos);
   }
 
-  const respuesta = await fetch(`https://erp-piladora-don-guillo.onrender.com${ruta}`, {
+  const respuesta = await fetch(`${API_SEGURIDAD_RENDER}${ruta}`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -55,7 +57,7 @@ async function seguridadApiPut(ruta, datos) {
     return await window.apiPut(ruta, datos);
   }
 
-  const respuesta = await fetch(`https://erp-piladora-don-guillo.onrender.com${ruta}`, {
+  const respuesta = await fetch(`${API_SEGURIDAD_RENDER}${ruta}`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -77,7 +79,7 @@ async function seguridadApiPatch(ruta, datos) {
     return await window.apiPatch(ruta, datos);
   }
 
-  const respuesta = await fetch(`https://erp-piladora-don-guillo.onrender.com${ruta}`, {
+  const respuesta = await fetch(`${API_SEGURIDAD_RENDER}${ruta}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -99,7 +101,7 @@ async function seguridadApiDelete(ruta) {
     return await window.apiDelete(ruta);
   }
 
-  const respuesta = await fetch(`https://erp-piladora-don-guillo.onrender.com${ruta}`, {
+  const respuesta = await fetch(`${API_SEGURIDAD_RENDER}${ruta}`, {
     method: "DELETE",
   });
 
@@ -167,7 +169,51 @@ function esPerfilAdministradorNombre(nombrePerfil) {
 
 function esPerfilGerenteNombre(nombrePerfil) {
   const perfil = normalizarTextoSeguridad(nombrePerfil);
-  return perfil.includes("gerente");
+  return perfil.includes("gerente") || perfil.includes("directivo") || perfil.includes("direccion");
+}
+
+function esPerfilOperativoNombre(nombrePerfil) {
+  const perfil = normalizarTextoSeguridad(nombrePerfil);
+
+  return (
+    !esPerfilAdministradorNombre(nombrePerfil) &&
+    !esPerfilGerenteNombre(nombrePerfil) &&
+    (
+      perfil.includes("operador") ||
+      perfil.includes("compras") ||
+      perfil.includes("bascula") ||
+      perfil.includes("ventas") ||
+      perfil.includes("inventario") ||
+      perfil.includes("talento") ||
+      perfil.includes("produccion") ||
+      perfil.includes("activos") ||
+      perfil !== ""
+    )
+  );
+}
+
+function esModuloReportesIA(modulo) {
+  const nombre = normalizarTextoSeguridad(modulo?.nombre_modulo || "");
+  const ruta = normalizarTextoSeguridad(modulo?.ruta_html || "");
+
+  return (
+    nombre.includes("reporte") ||
+    nombre.includes("ia") ||
+    nombre.includes("inteligencia") ||
+    ruta.includes("reporte") ||
+    ruta.includes("ia")
+  );
+}
+
+function esModuloSeguridadSistema(modulo) {
+  const nombre = normalizarTextoSeguridad(modulo?.nombre_modulo || "");
+  const ruta = normalizarTextoSeguridad(modulo?.ruta_html || "");
+
+  return (
+    nombre.includes("seguridad") ||
+    nombre.includes("usuario") ||
+    ruta.includes("seguridad")
+  );
 }
 
 function obtenerPerfilPorId(idPerfil) {
@@ -181,11 +227,16 @@ function obtenerNombrePerfilPorId(idPerfil) {
   return perfil ? perfil.nombre_perfil : "";
 }
 
+function obtenerPerfilUsuario(usuario) {
+  if (!usuario) return "";
+  return usuario.nombre_perfil || usuario.perfil || obtenerNombrePerfilPorId(usuario.id_perfil) || "";
+}
+
 function esUsuarioAdminPrincipal(usuario) {
   if (!usuario) return false;
 
   const nombreUsuario = normalizarTextoSeguridad(usuario.usuario);
-  const nombrePerfil = normalizarTextoSeguridad(usuario.nombre_perfil);
+  const nombrePerfil = normalizarTextoSeguridad(obtenerPerfilUsuario(usuario));
 
   return (
     Number(usuario.id_usuario) === 1 ||
@@ -343,22 +394,18 @@ function limpiarFormularioUsuario() {
   if (contrasenaUsuario) {
     contrasenaUsuario.value = "";
     contrasenaUsuario.type = "password";
+    contrasenaUsuario.required = true;
   }
 
   if (perfilUsuario) {
     perfilUsuario.value = "";
-    
-    // REGLA DE SEGURIDAD: Volver a ocultar el perfil Administrador al limpiar
-    Array.from(perfilUsuario.options).forEach(opt => {
-        const textNorm = normalizarTextoSeguridad(opt.textContent);
-        if (textNorm.includes("administrador") || textNorm === "admin") {
-            opt.disabled = true;
-            opt.style.display = "none";
-        }
-    });
+    perfilUsuario.disabled = false;
   }
-  
-  if (estadoUsuario) estadoUsuario.value = "true";
+
+  if (estadoUsuario) {
+    estadoUsuario.value = "true";
+    estadoUsuario.disabled = false;
+  }
 
   const mostrarContrasenaUsuario = document.getElementById("mostrarContrasenaUsuario");
   if (mostrarContrasenaUsuario) {
@@ -418,10 +465,10 @@ function limpiarCambioContrasena() {
 
 function mostrarEstadoUsuario(estado) {
   if (estado === true) {
-    return `<span class="badge bg-success">Activo</span>`;
+    return `<span class="badge-estado-activo">Activo</span>`;
   }
 
-  return `<span class="badge bg-danger">Inactivo</span>`;
+  return `<span class="badge-estado-inactivo">Inactivo</span>`;
 }
 
 function validarCampoTexto(valor, nombreCampo) {
@@ -431,6 +478,26 @@ function validarCampoTexto(valor, nombreCampo) {
   }
 
   return true;
+}
+
+/* ---------------------------------------------------- */
+/* AUDITORÍA FRONTEND OPCIONAL                          */
+/* ---------------------------------------------------- */
+
+async function registrarAccionSeguridadFrontend(accion, descripcion, tablaAfectada = null, idRegistroAfectado = null) {
+  if (window.registrarAccionSistema) {
+    try {
+      await window.registrarAccionSistema(
+        "Seguridad y Usuarios",
+        accion,
+        descripcion,
+        tablaAfectada,
+        idRegistroAfectado
+      );
+    } catch (error) {
+      console.warn("No se pudo registrar auditoría desde seguridad.js:", error);
+    }
+  }
 }
 
 /* ---------------------------------------------------- */
@@ -452,14 +519,6 @@ async function cargarPerfilesSeguridad() {
     const option = document.createElement("option");
     option.value = perfil.id_perfil;
     option.textContent = perfil.nombre_perfil;
-
-    // REGLA DE SEGURIDAD: Ocultar el perfil Administrador de la lista para crear nuevos usuarios
-    const nombreNormalizado = normalizarTextoSeguridad(perfil.nombre_perfil);
-    if (nombreNormalizado.includes("administrador") || nombreNormalizado === "admin") {
-        option.disabled = true;
-        option.style.display = "none";
-    }
-
     perfilUsuario.appendChild(option);
   });
 }
@@ -541,6 +600,7 @@ function renderizarUsuariosSeguridad() {
     const fila = document.createElement("tr");
 
     const adminPrincipal = esUsuarioAdminPrincipal(usuario);
+    const nombrePerfil = obtenerPerfilUsuario(usuario);
     const textoBotonEstado = usuario.estado ? "Desactivar" : "Activar";
     const claseBotonEstado = usuario.estado ? "btn-danger" : "btn-success";
 
@@ -582,7 +642,7 @@ function renderizarUsuariosSeguridad() {
       <td>${escaparHTMLSeguridad(usuario.correo || "-")}</td>
       <td>
         <span class="badge bg-primary">
-          ${escaparHTMLSeguridad(usuario.nombre_perfil || "-")}
+          ${escaparHTMLSeguridad(nombrePerfil || "-")}
         </span>
       </td>
       <td>${mostrarEstadoUsuario(usuario.estado)}</td>
@@ -761,6 +821,8 @@ async function guardarUsuarioSeguridad(event) {
   }
 
   try {
+    let idUsuarioGuardado = null;
+
     if (datos.idUsuarioEditar) {
       const datosActualizar = {
         id_perfil: Number(datos.idPerfil),
@@ -777,6 +839,7 @@ async function guardarUsuarioSeguridad(event) {
         datosActualizar
       );
 
+      idUsuarioGuardado = Number(datos.idUsuarioEditar);
       alert("Usuario actualizado correctamente.");
     } else {
       const datosCrear = {
@@ -790,10 +853,20 @@ async function guardarUsuarioSeguridad(event) {
         id_admin: obtenerIdAdminActual(),
       };
 
-      await seguridadApiPost("/api/seguridad/usuarios", datosCrear);
+      const respuesta = await seguridadApiPost("/api/seguridad/usuarios", datosCrear);
+      idUsuarioGuardado = Number(respuesta?.usuario?.id_usuario || respuesta?.id_usuario || 0);
 
       alert("Usuario creado correctamente.");
     }
+
+    await registrarAccionSeguridadFrontend(
+      datos.idUsuarioEditar ? "EDITAR_USUARIO" : "CREAR_USUARIO",
+      datos.idUsuarioEditar
+        ? `Se actualizó el usuario ${datos.usuario}.`
+        : `Se creó el usuario ${datos.usuario}.`,
+      "usuarios",
+      idUsuarioGuardado || null
+    );
 
     limpiarFormularioUsuario();
     await cargarUsuariosSeguridad();
@@ -828,6 +901,7 @@ function editarUsuarioSeguridad(idUsuario) {
   if (contrasenaUsuario) {
     contrasenaUsuario.value = "";
     contrasenaUsuario.type = "password";
+    contrasenaUsuario.required = false;
   }
 
   const mostrarContrasenaUsuario = document.getElementById("mostrarContrasenaUsuario");
@@ -836,19 +910,14 @@ function editarUsuarioSeguridad(idUsuario) {
   }
 
   if (perfilUsuario) {
-    // REGLA DE SEGURIDAD: Si está editando al Admin Principal, mostramos su perfil temporalmente
-    if (esUsuarioAdminPrincipal(usuario)) {
-        Array.from(perfilUsuario.options).forEach(opt => {
-            if (Number(opt.value) === Number(usuario.id_perfil)) {
-                opt.disabled = false;
-                opt.style.display = "block";
-            }
-        });
-    }
+    perfilUsuario.disabled = false;
     perfilUsuario.value = usuario.id_perfil;
   }
-  
-  if (estadoUsuario) estadoUsuario.value = usuario.estado ? "true" : "false";
+
+  if (estadoUsuario) {
+    estadoUsuario.disabled = false;
+    estadoUsuario.value = usuario.estado ? "true" : "false";
+  }
 
   const btnGuardar = document.getElementById("btnGuardarUsuario");
   if (btnGuardar) {
@@ -898,6 +967,13 @@ async function cambiarEstadoUsuarioSeguridad(idUsuario, nuevoEstado) {
       estado: nuevoEstado,
       id_admin: obtenerIdAdminActual(),
     });
+
+    await registrarAccionSeguridadFrontend(
+      nuevoEstado ? "ACTIVAR_USUARIO" : "INACTIVAR_USUARIO",
+      `${nuevoEstado ? "Activó" : "Inactivó"} el usuario ${usuario.usuario}.`,
+      "usuarios",
+      Number(idUsuario)
+    );
 
     alert(`Usuario ${nuevoEstado ? "activado" : "desactivado"} correctamente.`);
 
@@ -958,11 +1034,25 @@ async function cambiarContrasenaUsuarioSeguridad(event) {
     return;
   }
 
+  const usuario = usuariosSeguridad.find((u) => Number(u.id_usuario) === Number(idUsuario));
+  const confirmar = confirm(`¿Desea cambiar la contraseña del usuario ${usuario?.usuario || idUsuario}?`);
+
+  if (!confirmar) {
+    return;
+  }
+
   try {
     await seguridadApiPut(`/api/seguridad/usuarios/${idUsuario}/contrasena`, {
       nueva_contrasena: nuevaContrasena,
       id_admin: obtenerIdAdminActual(),
     });
+
+    await registrarAccionSeguridadFrontend(
+      "CAMBIAR_CONTRASENA",
+      `Cambió la contraseña del usuario ${usuario?.usuario || idUsuario}.`,
+      "usuarios",
+      Number(idUsuario)
+    );
 
     alert("Contraseña actualizada correctamente.");
 
@@ -992,7 +1082,7 @@ async function seleccionarPermisosUsuario(idUsuario) {
   }
 
   if (usuarioPermisosSeleccionado) {
-    usuarioPermisosSeleccionado.textContent = `${usuario.usuario} - ${usuario.nombre_perfil}`;
+    usuarioPermisosSeleccionado.textContent = `${usuario.usuario} - ${obtenerPerfilUsuario(usuario)}`;
   }
 
   try {
@@ -1010,6 +1100,129 @@ async function seleccionarPermisosUsuario(idUsuario) {
   }
 }
 
+function obtenerUsuarioPermisosSeleccionado() {
+  const idUsuario = document.getElementById("idUsuarioPermisos")?.value;
+
+  if (!idUsuario) {
+    return null;
+  }
+
+  return usuariosSeguridad.find((item) => Number(item.id_usuario) === Number(idUsuario)) || null;
+}
+
+function obtenerCheckboxPermiso(fila, clase) {
+  return fila.querySelector(clase);
+}
+
+function marcarCheckbox(checkbox, valor, deshabilitar = false) {
+  if (!checkbox) return;
+  checkbox.checked = Boolean(valor);
+  checkbox.disabled = Boolean(deshabilitar);
+}
+
+function aplicarValoresFilaPermiso(fila, valores, deshabilitar = false) {
+  marcarCheckbox(obtenerCheckboxPermiso(fila, ".permiso-ver"), valores.ver, deshabilitar);
+  marcarCheckbox(obtenerCheckboxPermiso(fila, ".permiso-crear-check"), valores.crear, deshabilitar);
+  marcarCheckbox(obtenerCheckboxPermiso(fila, ".permiso-editar-check"), valores.editar, deshabilitar);
+  marcarCheckbox(obtenerCheckboxPermiso(fila, ".permiso-eliminar-check"), valores.eliminar, deshabilitar);
+  marcarCheckbox(obtenerCheckboxPermiso(fila, ".permiso-consultar-check"), valores.consultar, deshabilitar);
+  marcarCheckbox(obtenerCheckboxPermiso(fila, ".permiso-reporte-check"), valores.reporte, deshabilitar);
+}
+
+function obtenerModuloPorFila(fila) {
+  const idModulo = fila.querySelector(".permiso-id-modulo")?.value;
+
+  return modulosSeguridad.find((modulo) => {
+    return Number(modulo.id_modulo) === Number(idModulo);
+  });
+}
+
+function obtenerReglaPermisoParaPerfil(usuario, modulo) {
+  const perfil = obtenerPerfilUsuario(usuario);
+
+  if (esPerfilAdministradorNombre(perfil)) {
+    return {
+      valores: {
+        ver: true,
+        crear: true,
+        editar: true,
+        eliminar: true,
+        consultar: true,
+        reporte: true,
+      },
+      bloquear: true,
+      mensaje: "Perfil Administrador: control total obligatorio."
+    };
+  }
+
+  if (esPerfilGerenteNombre(perfil)) {
+    if (esModuloReportesIA(modulo)) {
+      return {
+        valores: {
+          ver: true,
+          crear: true,
+          editar: true,
+          eliminar: true,
+          consultar: true,
+          reporte: true,
+        },
+        bloquear: true,
+        mensaje: "Gerente/Directivo: control total en Reportes e IA."
+      };
+    }
+
+    return {
+      valores: {
+        ver: true,
+        crear: false,
+        editar: false,
+        eliminar: false,
+        consultar: true,
+        reporte: false,
+      },
+      bloquear: true,
+      mensaje: "Gerente/Directivo: solo consulta en módulos operativos."
+    };
+  }
+
+  return {
+    valores: null,
+    bloquear: false,
+    mensaje: "Operativo: permisos personalizados por administrador."
+  };
+}
+
+function agregarEventosCheckboxesFilaPermiso(fila) {
+  const checkVer = obtenerCheckboxPermiso(fila, ".permiso-ver");
+  const checkCrear = obtenerCheckboxPermiso(fila, ".permiso-crear-check");
+  const checkEditar = obtenerCheckboxPermiso(fila, ".permiso-editar-check");
+  const checkEliminar = obtenerCheckboxPermiso(fila, ".permiso-eliminar-check");
+  const checkConsultar = obtenerCheckboxPermiso(fila, ".permiso-consultar-check");
+  const checkReporte = obtenerCheckboxPermiso(fila, ".permiso-reporte-check");
+
+  [checkCrear, checkEditar, checkEliminar, checkReporte].forEach((check) => {
+    if (!check) return;
+
+    check.addEventListener("change", function () {
+      if (this.checked) {
+        if (checkVer) checkVer.checked = true;
+        if (checkConsultar) checkConsultar.checked = true;
+      }
+    });
+  });
+
+  if (checkVer) {
+    checkVer.addEventListener("change", function () {
+      if (!this.checked) {
+        if (checkCrear) checkCrear.checked = false;
+        if (checkEditar) checkEditar.checked = false;
+        if (checkEliminar) checkEliminar.checked = false;
+        if (checkReporte) checkReporte.checked = false;
+      }
+    });
+  }
+}
+
 function renderizarPermisosUsuario(usuario) {
   const tablaPermisos = document.getElementById("tablaPermisos");
 
@@ -1019,83 +1232,180 @@ function renderizarPermisosUsuario(usuario) {
 
   tablaPermisos.innerHTML = "";
 
+  if (!modulosSeguridad || modulosSeguridad.length === 0) {
+    tablaPermisos.innerHTML = `
+      <tr>
+        <td colspan="7" class="text-center text-muted">
+          No existen módulos registrados para asignar permisos.
+        </td>
+      </tr>
+    `;
+    return;
+  }
+
   const adminPrincipal = esUsuarioAdminPrincipal(usuario);
+  const perfil = obtenerPerfilUsuario(usuario);
 
   modulosSeguridad.forEach((modulo) => {
     const permisoExistente = permisosUsuarioSeleccionado.find(
       (permiso) => Number(permiso.id_modulo) === Number(modulo.id_modulo)
     );
 
-    let puedeVer = permisoExistente?.puede_ver === true;
-    let puedeCrear = permisoExistente?.puede_crear === true;
-    let puedeEditar = permisoExistente?.puede_editar === true;
-    let puedeEliminar = permisoExistente?.puede_eliminar === true;
-    let puedeConsultar = permisoExistente?.puede_consultar === true;
-    let puedeReporte = permisoExistente?.puede_generar_reporte === true;
+    let valores = {
+      ver: permisoExistente?.puede_ver === true,
+      crear: permisoExistente?.puede_crear === true,
+      editar: permisoExistente?.puede_editar === true,
+      eliminar: permisoExistente?.puede_eliminar === true,
+      consultar: permisoExistente?.puede_consultar === true,
+      reporte: permisoExistente?.puede_generar_reporte === true,
+    };
 
-    if (adminPrincipal) {
-      puedeVer = true;
-      puedeCrear = true;
-      puedeEditar = true;
-      puedeEliminar = true;
-      puedeConsultar = true;
-      puedeReporte = true;
+    let disabled = false;
+    let etiquetaRegla = "";
+
+    const reglaPerfil = obtenerReglaPermisoParaPerfil(usuario, modulo);
+
+    if (reglaPerfil.valores) {
+      valores = reglaPerfil.valores;
+      disabled = reglaPerfil.bloquear;
+      etiquetaRegla = reglaPerfil.mensaje;
     }
 
-    const disabledAdmin = adminPrincipal ? "disabled" : "";
+    if (adminPrincipal) {
+      disabled = true;
+      etiquetaRegla = "Administrador principal protegido: control total obligatorio.";
+    }
 
     const fila = document.createElement("tr");
+    fila.dataset.idModulo = String(modulo.id_modulo);
 
     fila.innerHTML = `
       <td>
         <strong>${escaparHTMLSeguridad(modulo.nombre_modulo)}</strong><br>
         <small class="text-muted">${escaparHTMLSeguridad(modulo.ruta_html || "")}</small>
+        ${
+          etiquetaRegla
+            ? `<br><small class="text-success">${escaparHTMLSeguridad(etiquetaRegla)}</small>`
+            : ""
+        }
         <input type="hidden" class="permiso-id-modulo" value="${Number(modulo.id_modulo)}">
       </td>
 
       <td class="text-center">
-        <input type="checkbox" class="form-check-input permiso-ver" ${puedeVer ? "checked" : ""} ${disabledAdmin}>
+        <input type="checkbox" class="form-check-input permiso-checkbox permiso-ver" ${valores.ver ? "checked" : ""} ${disabled ? "disabled" : ""}>
       </td>
 
       <td class="text-center">
-        <input type="checkbox" class="form-check-input permiso-crear-check" ${puedeCrear ? "checked" : ""} ${disabledAdmin}>
+        <input type="checkbox" class="form-check-input permiso-checkbox permiso-crear-check" ${valores.crear ? "checked" : ""} ${disabled ? "disabled" : ""}>
       </td>
 
       <td class="text-center">
-        <input type="checkbox" class="form-check-input permiso-editar-check" ${puedeEditar ? "checked" : ""} ${disabledAdmin}>
+        <input type="checkbox" class="form-check-input permiso-checkbox permiso-editar-check" ${valores.editar ? "checked" : ""} ${disabled ? "disabled" : ""}>
       </td>
 
       <td class="text-center">
-        <input type="checkbox" class="form-check-input permiso-eliminar-check" ${puedeEliminar ? "checked" : ""} ${disabledAdmin}>
+        <input type="checkbox" class="form-check-input permiso-checkbox permiso-eliminar-check" ${valores.eliminar ? "checked" : ""} ${disabled ? "disabled" : ""}>
       </td>
 
       <td class="text-center">
-        <input type="checkbox" class="form-check-input permiso-consultar-check" ${puedeConsultar ? "checked" : ""} ${disabledAdmin}>
+        <input type="checkbox" class="form-check-input permiso-checkbox permiso-consultar-check" ${valores.consultar ? "checked" : ""} ${disabled ? "disabled" : ""}>
       </td>
 
       <td class="text-center">
-        <input type="checkbox" class="form-check-input permiso-reporte-check" ${puedeReporte ? "checked" : ""} ${disabledAdmin}>
+        <input type="checkbox" class="form-check-input permiso-checkbox permiso-reporte-check" ${valores.reporte ? "checked" : ""} ${disabled ? "disabled" : ""}>
       </td>
     `;
 
     tablaPermisos.appendChild(fila);
+    agregarEventosCheckboxesFilaPermiso(fila);
   });
 
   if (adminPrincipal) {
     const aviso = document.createElement("tr");
     aviso.innerHTML = `
       <td colspan="7" class="text-center text-success fw-bold">
-        El administrador principal tiene control total del ERP. Sus permisos no pueden ser modificados desde esta pantalla.
+        El administrador principal tiene control total del ERP. Sus permisos no pueden ser reducidos desde esta pantalla.
+      </td>
+    `;
+    tablaPermisos.appendChild(aviso);
+  } else if (esPerfilGerenteNombre(perfil)) {
+    const aviso = document.createElement("tr");
+    aviso.innerHTML = `
+      <td colspan="7" class="text-center text-primary fw-bold">
+        Regla aplicada: Gerente/Directivo consulta todos los módulos y tiene control total en Reportes e IA.
+      </td>
+    `;
+    tablaPermisos.appendChild(aviso);
+  } else if (esPerfilAdministradorNombre(perfil)) {
+    const aviso = document.createElement("tr");
+    aviso.innerHTML = `
+      <td colspan="7" class="text-center text-success fw-bold">
+        Regla aplicada: el perfil Administrador mantiene control total en todos los módulos.
       </td>
     `;
     tablaPermisos.appendChild(aviso);
   }
 }
 
+function normalizarPermisoPorPerfil(usuario, modulo, permiso) {
+  const perfil = obtenerPerfilUsuario(usuario);
+
+  if (esPerfilAdministradorNombre(perfil)) {
+    return {
+      ...permiso,
+      puede_ver: true,
+      puede_crear: true,
+      puede_editar: true,
+      puede_eliminar: true,
+      puede_consultar: true,
+      puede_generar_reporte: true,
+    };
+  }
+
+  if (esPerfilGerenteNombre(perfil)) {
+    if (esModuloReportesIA(modulo)) {
+      return {
+        ...permiso,
+        puede_ver: true,
+        puede_crear: true,
+        puede_editar: true,
+        puede_eliminar: true,
+        puede_consultar: true,
+        puede_generar_reporte: true,
+      };
+    }
+
+    return {
+      ...permiso,
+      puede_ver: true,
+      puede_crear: false,
+      puede_editar: false,
+      puede_eliminar: false,
+      puede_consultar: true,
+      puede_generar_reporte: false,
+    };
+  }
+
+  const necesitaVerConsultar =
+    permiso.puede_crear ||
+    permiso.puede_editar ||
+    permiso.puede_eliminar ||
+    permiso.puede_generar_reporte;
+
+  if (necesitaVerConsultar) {
+    return {
+      ...permiso,
+      puede_ver: true,
+      puede_consultar: true,
+    };
+  }
+
+  return permiso;
+}
+
 function construirPermisosDesdeTabla(usuario) {
   const filas = document.querySelectorAll("#tablaPermisos tr");
   const permisos = [];
-  const adminPrincipal = esUsuarioAdminPrincipal(usuario);
 
   filas.forEach((fila) => {
     const idModulo = fila.querySelector(".permiso-id-modulo")?.value;
@@ -1104,31 +1414,20 @@ function construirPermisosDesdeTabla(usuario) {
       return;
     }
 
-    let puedeVer = fila.querySelector(".permiso-ver")?.checked || false;
-    let puedeCrear = fila.querySelector(".permiso-crear-check")?.checked || false;
-    let puedeEditar = fila.querySelector(".permiso-editar-check")?.checked || false;
-    let puedeEliminar = fila.querySelector(".permiso-eliminar-check")?.checked || false;
-    let puedeConsultar = fila.querySelector(".permiso-consultar-check")?.checked || false;
-    let puedeReporte = fila.querySelector(".permiso-reporte-check")?.checked || false;
+    const modulo = obtenerModuloPorFila(fila);
 
-    if (adminPrincipal) {
-      puedeVer = true;
-      puedeCrear = true;
-      puedeEditar = true;
-      puedeEliminar = true;
-      puedeConsultar = true;
-      puedeReporte = true;
-    }
-
-    permisos.push({
+    let permiso = {
       id_modulo: Number(idModulo),
-      puede_ver: puedeVer,
-      puede_crear: puedeCrear,
-      puede_editar: puedeEditar,
-      puede_eliminar: puedeEliminar,
-      puede_consultar: puedeConsultar,
-      puede_generar_reporte: puedeReporte,
-    });
+      puede_ver: fila.querySelector(".permiso-ver")?.checked || false,
+      puede_crear: fila.querySelector(".permiso-crear-check")?.checked || false,
+      puede_editar: fila.querySelector(".permiso-editar-check")?.checked || false,
+      puede_eliminar: fila.querySelector(".permiso-eliminar-check")?.checked || false,
+      puede_consultar: fila.querySelector(".permiso-consultar-check")?.checked || false,
+      puede_generar_reporte: fila.querySelector(".permiso-reporte-check")?.checked || false,
+    };
+
+    permiso = normalizarPermisoPorPerfil(usuario, modulo, permiso);
+    permisos.push(permiso);
   });
 
   return permisos;
@@ -1141,13 +1440,34 @@ function validarPermisosUsuarioSeguridad(usuario, permisos) {
   }
 
   if (esUsuarioAdminPrincipal(usuario)) {
-    alert("No se permite modificar los permisos del administrador principal.");
-    return false;
+    const confirmar = confirm(
+      "El administrador principal tendrá control total obligatorio. ¿Desea guardar nuevamente esos permisos?"
+    );
+
+    return confirmar;
   }
 
   if (!Array.isArray(permisos) || permisos.length === 0) {
     alert("No existen permisos para guardar.");
     return false;
+  }
+
+  const perfil = obtenerPerfilUsuario(usuario);
+
+  if (esPerfilAdministradorNombre(perfil)) {
+    const confirmar = confirm(
+      "El usuario tiene perfil Administrador. Se guardará control total en todos los módulos. ¿Desea continuar?"
+    );
+
+    return confirmar;
+  }
+
+  if (esPerfilGerenteNombre(perfil)) {
+    const confirmar = confirm(
+      "El usuario tiene perfil Gerente/Directivo. Se guardará consulta en módulos operativos y control total en Reportes e IA. ¿Desea continuar?"
+    );
+
+    return confirmar;
   }
 
   const tieneAlgunAcceso = permisos.some((permiso) => {
@@ -1199,12 +1519,164 @@ async function guardarPermisosUsuarioSeguridad() {
       id_admin: obtenerIdAdminActual(),
     });
 
+    await registrarAccionSeguridadFrontend(
+      "EDITAR_PERMISOS",
+      `Se actualizaron los permisos del usuario ${usuario?.usuario || idUsuario}.`,
+      "permisos_usuario",
+      Number(idUsuario)
+    );
+
     alert("Permisos actualizados correctamente.");
 
     await seleccionarPermisosUsuario(Number(idUsuario));
   } catch (error) {
     mostrarErrorSeguridad(error, "No se pudieron actualizar los permisos.");
   }
+}
+
+/* ---------------------------------------------------- */
+/* PLANTILLAS DE PERMISOS                               */
+/* ---------------------------------------------------- */
+
+function aplicarPlantillaAdministradorPermisos() {
+  const usuario = obtenerUsuarioPermisosSeleccionado();
+
+  if (!usuario) {
+    alert("Seleccione primero un usuario para aplicar la plantilla.");
+    return;
+  }
+
+  const filas = document.querySelectorAll("#tablaPermisos tr");
+
+  filas.forEach((fila) => {
+    if (!fila.querySelector(".permiso-id-modulo")) return;
+
+    aplicarValoresFilaPermiso(
+      fila,
+      {
+        ver: true,
+        crear: true,
+        editar: true,
+        eliminar: true,
+        consultar: true,
+        reporte: true,
+      },
+      false
+    );
+  });
+
+  alert("Plantilla de Administrador aplicada. Revise y guarde los permisos.");
+}
+
+function aplicarPlantillaGerentePermisos() {
+  const usuario = obtenerUsuarioPermisosSeleccionado();
+
+  if (!usuario) {
+    alert("Seleccione primero un usuario para aplicar la plantilla.");
+    return;
+  }
+
+  const filas = document.querySelectorAll("#tablaPermisos tr");
+
+  filas.forEach((fila) => {
+    if (!fila.querySelector(".permiso-id-modulo")) return;
+
+    const modulo = obtenerModuloPorFila(fila);
+
+    if (esModuloReportesIA(modulo)) {
+      aplicarValoresFilaPermiso(
+        fila,
+        {
+          ver: true,
+          crear: true,
+          editar: true,
+          eliminar: true,
+          consultar: true,
+          reporte: true,
+        },
+        false
+      );
+    } else {
+      aplicarValoresFilaPermiso(
+        fila,
+        {
+          ver: true,
+          crear: false,
+          editar: false,
+          eliminar: false,
+          consultar: true,
+          reporte: false,
+        },
+        false
+      );
+    }
+  });
+
+  alert("Plantilla de Gerente/Directivo aplicada. Revise y guarde los permisos.");
+}
+
+function aplicarPlantillaSoloConsultaPermisos() {
+  const usuario = obtenerUsuarioPermisosSeleccionado();
+
+  if (!usuario) {
+    alert("Seleccione primero un usuario para aplicar la plantilla.");
+    return;
+  }
+
+  const filas = document.querySelectorAll("#tablaPermisos tr");
+
+  filas.forEach((fila) => {
+    if (!fila.querySelector(".permiso-id-modulo")) return;
+
+    aplicarValoresFilaPermiso(
+      fila,
+      {
+        ver: true,
+        crear: false,
+        editar: false,
+        eliminar: false,
+        consultar: true,
+        reporte: false,
+      },
+      false
+    );
+  });
+
+  alert("Plantilla de solo consulta aplicada. Revise y guarde los permisos.");
+}
+
+function limpiarChecksPermisosUsuario() {
+  const usuario = obtenerUsuarioPermisosSeleccionado();
+
+  if (!usuario) {
+    alert("Seleccione primero un usuario para limpiar permisos.");
+    return;
+  }
+
+  const confirmar = confirm("Se quitarán las marcas visibles de permisos. ¿Desea continuar?");
+
+  if (!confirmar) {
+    return;
+  }
+
+  const filas = document.querySelectorAll("#tablaPermisos tr");
+
+  filas.forEach((fila) => {
+    if (!fila.querySelector(".permiso-id-modulo")) return;
+
+    aplicarValoresFilaPermiso(
+      fila,
+      {
+        ver: false,
+        crear: false,
+        editar: false,
+        eliminar: false,
+        consultar: false,
+        reporte: false,
+      },
+      false
+    );
+  });
 }
 
 /* ---------------------------------------------------- */
@@ -1223,6 +1695,11 @@ document.addEventListener("DOMContentLoaded", async function () {
   const btnGuardarPermisos = document.getElementById("btnGuardarPermisos");
   const btnLimpiarPermisos = document.getElementById("btnLimpiarPermisos");
   const formCambiarContrasena = document.getElementById("formCambiarContrasena");
+
+  const btnPermisosAdministrador = document.getElementById("btnPermisosAdministrador");
+  const btnPermisosGerente = document.getElementById("btnPermisosGerente");
+  const btnPermisosSoloConsulta = document.getElementById("btnPermisosSoloConsulta");
+  const btnPermisosLimpiarChecks = document.getElementById("btnPermisosLimpiarChecks");
 
   if (formUsuario) {
     formUsuario.addEventListener("submit", guardarUsuarioSeguridad);
@@ -1244,6 +1721,22 @@ document.addEventListener("DOMContentLoaded", async function () {
     formCambiarContrasena.addEventListener("submit", cambiarContrasenaUsuarioSeguridad);
   }
 
+  if (btnPermisosAdministrador) {
+    btnPermisosAdministrador.addEventListener("click", aplicarPlantillaAdministradorPermisos);
+  }
+
+  if (btnPermisosGerente) {
+    btnPermisosGerente.addEventListener("click", aplicarPlantillaGerentePermisos);
+  }
+
+  if (btnPermisosSoloConsulta) {
+    btnPermisosSoloConsulta.addEventListener("click", aplicarPlantillaSoloConsultaPermisos);
+  }
+
+  if (btnPermisosLimpiarChecks) {
+    btnPermisosLimpiarChecks.addEventListener("click", limpiarChecksPermisosUsuario);
+  }
+
   activarMostrarContrasenasSeguridad();
   aplicarFiltrosEscrituraSeguridad();
 
@@ -1258,3 +1751,8 @@ window.editarUsuarioSeguridad = editarUsuarioSeguridad;
 window.cambiarEstadoUsuarioSeguridad = cambiarEstadoUsuarioSeguridad;
 window.seleccionarPermisosUsuario = seleccionarPermisosUsuario;
 window.seleccionarCambioContrasena = seleccionarCambioContrasena;
+
+window.aplicarPlantillaAdministradorPermisos = aplicarPlantillaAdministradorPermisos;
+window.aplicarPlantillaGerentePermisos = aplicarPlantillaGerentePermisos;
+window.aplicarPlantillaSoloConsultaPermisos = aplicarPlantillaSoloConsultaPermisos;
+window.limpiarChecksPermisosUsuario = limpiarChecksPermisosUsuario;

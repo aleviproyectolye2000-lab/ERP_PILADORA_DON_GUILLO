@@ -11,6 +11,146 @@
     />
 
     <link rel="stylesheet" href="css/style.css" />
+
+    <style>
+      .seguridad-card {
+        border: 0;
+        border-left: 5px solid #198754;
+        border-radius: 10px;
+      }
+
+      .seguridad-card.danger {
+        border-left-color: #dc3545;
+      }
+
+      .seguridad-card.warning {
+        border-left-color: #ffc107;
+      }
+
+      .seguridad-card.info {
+        border-left-color: #0dcaf0;
+      }
+
+      .seguridad-header {
+        background: #198754;
+        color: #fff;
+        padding: 0.7rem 0.95rem;
+        border-radius: 0.375rem 0.375rem 0 0;
+      }
+
+      .seguridad-header h5 {
+        margin: 0;
+        font-weight: 700;
+      }
+
+      .regla-permiso {
+        border: 1px solid #dee2e6;
+        border-left: 5px solid #198754;
+        border-radius: 10px;
+        background: #fff;
+        padding: 14px;
+        height: 100%;
+      }
+
+      .regla-permiso.gerente {
+        border-left-color: #0d6efd;
+      }
+
+      .regla-permiso.operativo {
+        border-left-color: #ffc107;
+      }
+
+      .regla-permiso h6 {
+        font-weight: 700;
+        margin-bottom: 8px;
+      }
+
+      .regla-permiso p {
+        margin-bottom: 0;
+        font-size: 0.84rem;
+        color: #495057;
+      }
+
+      .tabla-seguridad th,
+      .tabla-seguridad td {
+        font-size: 0.82rem;
+        vertical-align: middle;
+      }
+
+      .tabla-seguridad th {
+        white-space: nowrap;
+      }
+
+      .tabla-permisos th,
+      .tabla-permisos td {
+        text-align: center;
+        vertical-align: middle;
+        font-size: 0.82rem;
+      }
+
+      .tabla-permisos td:first-child,
+      .tabla-permisos th:first-child {
+        text-align: left;
+        min-width: 220px;
+      }
+
+      .tabla-scroll {
+        overflow-x: auto;
+      }
+
+      .badge-estado-activo {
+        background: #198754;
+        color: #fff;
+        padding: 0.35rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 700;
+      }
+
+      .badge-estado-inactivo {
+        background: #6c757d;
+        color: #fff;
+        padding: 0.35rem 0.55rem;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 700;
+      }
+
+      .texto-ayuda {
+        font-size: 0.8rem;
+      }
+
+      .acciones-permisos {
+        gap: 0.5rem;
+        flex-wrap: wrap;
+      }
+
+      .form-control[readonly] {
+        background: #f8f9fa;
+      }
+
+      .alerta-seguridad {
+        border-left: 5px solid #ffc107;
+      }
+
+      .alerta-reglas {
+        border-left: 5px solid #0dcaf0;
+      }
+
+      .permiso-checkbox {
+        width: 18px;
+        height: 18px;
+      }
+
+      @media (max-width: 992px) {
+        .tabla-seguridad th,
+        .tabla-seguridad td,
+        .tabla-permisos th,
+        .tabla-permisos td {
+          font-size: 0.74rem;
+        }
+      }
+    </style>
   </head>
 
   <body>
@@ -39,7 +179,7 @@
           <div>
             <h2 class="fw-bold text-success">Seguridad y Usuarios</h2>
             <p class="text-muted mb-0">
-              Gestión de usuarios, perfiles y permisos de acceso al ERP.
+              Gestión de usuarios, perfiles, contraseñas y permisos de acceso al ERP.
             </p>
           </div>
 
@@ -49,27 +189,57 @@
           </div>
         </div>
 
-        <div class="alert alert-warning shadow-sm" role="alert">
+        <div class="alert alert-warning alerta-seguridad shadow-sm" role="alert">
           <strong>Importante:</strong>
           este módulo es exclusivo del administrador. Desde aquí se crean usuarios,
-          se activan o desactivan cuentas y se asignan permisos por módulo.
-          El usuario administrador principal no debe ser desactivado, eliminado
-          ni quedarse sin permisos de control total.
+          se activan o desactivan cuentas, se cambian contraseñas y se asignan
+          permisos por módulo. El administrador principal no debe quedarse sin
+          permisos de control total.
         </div>
 
-        <div class="alert alert-info shadow-sm" role="alert">
-          <strong>Regla de seguridad:</strong>
-          el administrador puede asignar permisos personalizados a cada usuario
-          según la necesidad del negocio. Por ejemplo, un usuario puede tener
-          permisos de compras, ventas, talento humano o reportes si el administrador
-          lo autoriza. El perfil Gerente debe mantenerse orientado a consulta,
-          reportes e inteligencia artificial, sin operaciones de creación,
-          modificación o eliminación.
+        <div class="alert alert-info alerta-reglas shadow-sm" role="alert">
+          <strong>Regla general:</strong>
+          el Administrador tiene control completo. El Gerente o Directivo debe
+          mantenerse principalmente en consulta para todos los módulos, excepto
+          <strong>Reportes e IA</strong>, donde puede tener control total. Los
+          usuarios operativos solo podrán hacer lo que el administrador les asigne.
+        </div>
+
+        <div class="row g-3 mb-4">
+          <div class="col-md-4">
+            <div class="regla-permiso">
+              <h6 class="text-success">Administrador</h6>
+              <p>
+                Control total en todos los módulos: ver, crear, editar, eliminar,
+                consultar, generar reportes, administrar usuarios y asignar permisos.
+              </p>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="regla-permiso gerente">
+              <h6 class="text-primary">Gerente / Directivo</h6>
+              <p>
+                Consulta general en módulos operativos. En Reportes e IA puede
+                tener control completo para análisis gerencial y toma de decisiones.
+              </p>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="regla-permiso operativo">
+              <h6 class="text-warning">Operativo</h6>
+              <p>
+                Solo puede crear, editar, consultar o eliminar según los permisos
+                específicos que el administrador marque para cada módulo.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div class="row g-4 mb-4">
           <div class="col-md-3">
-            <div class="card dashboard-card shadow-sm">
+            <div class="card seguridad-card shadow-sm">
               <div class="card-body">
                 <h6 class="text-muted">Usuarios registrados</h6>
                 <h3 class="fw-bold text-success" id="totalUsuarios">0</h3>
@@ -79,7 +249,7 @@
           </div>
 
           <div class="col-md-3">
-            <div class="card dashboard-card shadow-sm">
+            <div class="card seguridad-card shadow-sm">
               <div class="card-body">
                 <h6 class="text-muted">Usuarios activos</h6>
                 <h3 class="fw-bold text-success" id="usuariosActivos">0</h3>
@@ -89,7 +259,7 @@
           </div>
 
           <div class="col-md-3">
-            <div class="card dashboard-card shadow-sm">
+            <div class="card seguridad-card danger shadow-sm">
               <div class="card-body">
                 <h6 class="text-muted">Usuarios inactivos</h6>
                 <h3 class="fw-bold text-danger" id="usuariosInactivos">0</h3>
@@ -99,7 +269,7 @@
           </div>
 
           <div class="col-md-3">
-            <div class="card dashboard-card shadow-sm">
+            <div class="card seguridad-card info shadow-sm">
               <div class="card-body">
                 <h6 class="text-muted">Módulos del sistema</h6>
                 <h3 class="fw-bold text-success" id="totalModulos">0</h3>
@@ -109,9 +279,10 @@
           </div>
         </div>
 
-        <div class="card shadow-sm mb-4">
-          <div class="card-header bg-success text-white">
-            <h5 class="mb-0">Registro y edición de usuario</h5>
+        <section class="card shadow-sm mb-4">
+          <div class="seguridad-header d-flex justify-content-between align-items-center">
+            <h5>Registro y edición de usuario</h5>
+            <small>Crear, editar y asignar perfil</small>
           </div>
 
           <div class="card-body">
@@ -205,7 +376,7 @@
                   </label>
                 </div>
 
-                <small class="text-muted">
+                <small class="text-muted texto-ayuda">
                   Obligatoria solo al crear un usuario nuevo. Mínimo 8 caracteres,
                   con letras y números.
                 </small>
@@ -216,7 +387,7 @@
                 <select class="form-select" id="perfilUsuario" required>
                   <option value="">Seleccione</option>
                 </select>
-                <small class="text-muted">
+                <small class="text-muted texto-ayuda">
                   El perfil define la base de permisos del usuario.
                 </small>
               </div>
@@ -227,7 +398,7 @@
                   <option value="true">Activo</option>
                   <option value="false">Inactivo</option>
                 </select>
-                <small class="text-muted">
+                <small class="text-muted texto-ayuda">
                   Un usuario inactivo no debe poder ingresar al ERP.
                 </small>
               </div>
@@ -251,15 +422,16 @@
               </div>
             </form>
           </div>
-        </div>
+        </section>
 
-        <div class="card shadow-sm mb-4">
-          <div class="card-header bg-success text-white">
-            <h5 class="mb-0">Usuarios del sistema</h5>
+        <section class="card shadow-sm mb-4">
+          <div class="seguridad-header d-flex justify-content-between align-items-center">
+            <h5>Usuarios del sistema</h5>
+            <small>Listado general</small>
           </div>
 
-          <div class="card-body table-responsive">
-            <table class="table table-bordered table-hover align-middle">
+          <div class="card-body tabla-scroll">
+            <table class="table table-bordered table-hover align-middle tabla-seguridad">
               <thead class="table-success">
                 <tr>
                   <th>ID</th>
@@ -282,13 +454,13 @@
               </tbody>
             </table>
           </div>
-        </div>
+        </section>
 
-        <div class="card shadow-sm mb-4">
+        <section class="card shadow-sm mb-4">
           <div
-            class="card-header bg-success text-white d-flex justify-content-between align-items-center"
+            class="seguridad-header d-flex justify-content-between align-items-center"
           >
-            <h5 class="mb-0">Permisos por usuario</h5>
+            <h5>Permisos por usuario</h5>
             <span
               class="badge bg-light text-success"
               id="usuarioPermisosSeleccionado"
@@ -300,22 +472,55 @@
           <div class="card-body">
             <input type="hidden" id="idUsuarioPermisos" />
 
-            <p class="text-muted">
+            <p class="text-muted mb-2">
               Seleccione un usuario desde la tabla y marque los permisos que tendrá
               en cada módulo. El administrador puede asignar permisos personalizados
               según las funciones reales del trabajador.
             </p>
 
             <div class="alert alert-light border shadow-sm mb-3" role="alert">
-              <strong>Nota:</strong>
-              no se debe quitar el control total al administrador principal.
-              Los permisos de gerente deben mantenerse para ver, consultar,
-              reportes e inteligencia artificial, sin acciones operativas como
-              crear, editar o eliminar.
+              <strong>Reglas de permisos:</strong>
+              Administrador debe tener control total. Gerente/Directivo debe tener
+              consulta en módulos operativos y control completo en Reportes e IA.
+              El Operativo debe respetar exactamente los permisos asignados por el administrador.
             </div>
 
-            <div class="table-responsive">
-              <table class="table table-bordered table-hover align-middle">
+            <div class="d-flex acciones-permisos mb-3">
+              <button
+                type="button"
+                class="btn btn-outline-success btn-sm"
+                id="btnPermisosAdministrador"
+              >
+                Plantilla Administrador
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-outline-primary btn-sm"
+                id="btnPermisosGerente"
+              >
+                Plantilla Gerente / Directivo
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-outline-warning btn-sm"
+                id="btnPermisosSoloConsulta"
+              >
+                Solo consulta
+              </button>
+
+              <button
+                type="button"
+                class="btn btn-outline-secondary btn-sm"
+                id="btnPermisosLimpiarChecks"
+              >
+                Quitar marcas
+              </button>
+            </div>
+
+            <div class="tabla-scroll">
+              <table class="table table-bordered table-hover align-middle tabla-permisos">
                 <thead class="table-success text-center">
                   <tr>
                     <th class="text-start">Módulo</th>
@@ -356,11 +561,11 @@
               </button>
             </div>
           </div>
-        </div>
+        </section>
 
-        <div class="card shadow-sm mb-4">
-          <div class="card-header bg-success text-white">
-            <h5 class="mb-0">Cambio de contraseña</h5>
+        <section class="card shadow-sm mb-4">
+          <div class="seguridad-header">
+            <h5>Cambio de contraseña</h5>
           </div>
 
           <div class="card-body">
@@ -403,7 +608,7 @@
                   </label>
                 </div>
 
-                <small class="text-muted">
+                <small class="text-muted texto-ayuda">
                   Use una contraseña segura. Mínimo 8 caracteres, con letras y números.
                 </small>
               </div>
@@ -415,7 +620,7 @@
               </div>
             </form>
           </div>
-        </div>
+        </section>
       </main>
     </div>
 
