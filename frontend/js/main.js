@@ -125,11 +125,17 @@ function validarIdentificacionEcuador(valor) {
 
 async function registrarAccesoAuditoria(idUsuario) {
   try {
+    /*
+      IMPORTANTE:
+      La IP real del cliente NO se debe enviar desde JavaScript.
+      El navegador no puede conocer de forma confiable la IP pública real.
+      Ahora la IP se captura correctamente desde el backend FastAPI usando Request
+      y headers de proxy como x-forwarded-for, x-real-ip o cf-connecting-ip.
+    */
     const respuesta = await window.apiPost("/api/auditoria/accesos", {
       id_usuario: Number(idUsuario),
       fecha_ingreso: obtenerFechaActualISO(),
       hora_ingreso: obtenerHoraActual(),
-      ip_equipo: "127.0.0.1",
       estado_sesion: "Activa",
     });
 
@@ -241,7 +247,7 @@ document.addEventListener("DOMContentLoaded", function () {
   const perfil = localStorage.getItem("perfilERP");
 
   if (usuarioActual) {
-    usuarioActual.textContent = usuario || "Usuario no identified";
+    usuarioActual.textContent = usuario || "Usuario no identificado";
   }
 
   if (perfilActual) {
@@ -358,183 +364,191 @@ document.addEventListener("DOMContentLoaded", function () {
 // ============================================================
 
 async function aplicarSeguridadVisual() {
-    const path = window.location.pathname;
-    let paginaActual = path.substring(path.lastIndexOf('/') + 1);
+  const path = window.location.pathname;
+  let paginaActual = path.substring(path.lastIndexOf("/") + 1);
 
-    if (paginaActual === '' || paginaActual === 'login.html' || paginaActual === 'index.html') return;
+  if (paginaActual === "" || paginaActual === "login.html" || paginaActual === "index.html") return;
 
-    const idUsuario = localStorage.getItem('idUsuarioERP');
-    if (!idUsuario) {
-        window.location.href = 'login.html';
-        return;
+  const idUsuario = localStorage.getItem("idUsuarioERP");
+  if (!idUsuario) {
+    window.location.href = "login.html";
+    return;
+  }
+
+  try {
+    const url = `/api/seguridad/validar-modulo?id_usuario=${idUsuario}&ruta_html=${paginaActual}`;
+    const respuesta = await window.apiGet(url);
+
+    if (!respuesta.permitido) {
+      alert("Acceso denegado: No tienes permiso para ver este módulo.");
+      window.location.href = "dashboard.html";
+      return;
     }
 
-    try {
-        const url = `/api/seguridad/validar-modulo?id_usuario=${idUsuario}&ruta_html=${paginaActual}`;
-        const respuesta = await window.apiGet(url);
+    const p = respuesta.permiso;
 
-        if (!respuesta.permitido) {
-            alert("Acceso denegado: No tienes permiso para ver este módulo.");
-            window.location.href = 'dashboard.html';
-            return;
-        }
+    // --- BLOQUEO SELECTIVO DE ACCIONES ---
 
-        const p = respuesta.permiso;
+    if (!p.puede_crear) {
+      document.querySelectorAll('.btn-success, [id*="Guardar"], [id*="Registrar"], [onclick*="crear"]').forEach(el => el.style.display = "none");
+    }
 
-        // --- BLOQUEO SELECTIVO DE ACCIONES ---
-        
-        if (!p.puede_crear) {
-            document.querySelectorAll('.btn-success, [id*="Guardar"], [id*="Registrar"], [onclick*="crear"]').forEach(el => el.style.display = 'none');
-        }
-        
-        if (!p.puede_editar) {
-            document.querySelectorAll('.btn-warning, [onclick*="editar"], [id*="Editar"]').forEach(el => el.style.display = 'none');
-        }
-        
-        if (!p.puede_eliminar) {
-            document.querySelectorAll('.btn-danger, [onclick*="anular"], [onclick*="eliminar"], [onclick*="desactivar"]').forEach(el => el.style.display = 'none');
-        }
+    if (!p.puede_editar) {
+      document.querySelectorAll('.btn-warning, [onclick*="editar"], [id*="Editar"]').forEach(el => el.style.display = "none");
+    }
 
-        if (!p.puede_editar && !p.puede_eliminar) {
-            setTimeout(() => {
-                const table = document.querySelector('table');
-                if (table) {
-                    const headerAcciones = Array.from(table.querySelectorAll('th')).find(th => 
-                        th.textContent.toLowerCase().includes('acciones')
-                    );
-                    if (headerAcciones) {
-                        const index = headerAcciones.cellIndex;
-                        headerAcciones.style.display = 'none';
-                        table.querySelectorAll('tr').forEach(tr => {
-                            if (tr.cells[index]) tr.cells[index].style.display = 'none';
-                        });
-                    }
-                }
-            }, 500);
-        }
+    if (!p.puede_eliminar) {
+      document.querySelectorAll('.btn-danger, [onclick*="anular"], [onclick*="eliminar"], [onclick*="desactivar"]').forEach(el => el.style.display = "none");
+    }
 
-        // 3. MODO SOLO LECTURA (Desactivar inputs, pero EXCLUYENDO el chat de IA)
-        if (!p.puede_crear && !p.puede_editar) {
-            // El selector :not(.ia-chat-input) protege el cuadro de texto del asistente
-            document.querySelectorAll('input:not(.ia-chat-input), select, textarea').forEach(el => {
-                if (!el.readOnly && !el.disabled) el.disabled = true;
+    if (!p.puede_editar && !p.puede_eliminar) {
+      setTimeout(() => {
+        const table = document.querySelector("table");
+        if (table) {
+          const headerAcciones = Array.from(table.querySelectorAll("th")).find(th =>
+            th.textContent.toLowerCase().includes("acciones")
+          );
+
+          if (headerAcciones) {
+            const index = headerAcciones.cellIndex;
+            headerAcciones.style.display = "none";
+
+            table.querySelectorAll("tr").forEach(tr => {
+              if (tr.cells[index]) tr.cells[index].style.display = "none";
             });
+          }
         }
-
-    } catch (error) {
-        console.error("Error validando seguridad:", error);
+      }, 500);
     }
+
+    // MODO SOLO LECTURA (Desactivar inputs, pero EXCLUYENDO el chat de IA)
+    if (!p.puede_crear && !p.puede_editar) {
+      // El selector :not(.ia-chat-input) protege el cuadro de texto del asistente
+      document.querySelectorAll("input:not(.ia-chat-input), select, textarea").forEach(el => {
+        if (!el.readOnly && !el.disabled) el.disabled = true;
+      });
+    }
+
+  } catch (error) {
+    console.error("Error validando seguridad:", error);
+  }
 }
 
-document.addEventListener('DOMContentLoaded', aplicarSeguridadVisual);
+document.addEventListener("DOMContentLoaded", aplicarSeguridadVisual);
 
 
 // ============================================================
-// ASISTENTE FLOTANTE DE IA AISLADO POR MÓDULOS (NUEVO)
+// ASISTENTE FLOTANTE DE IA AISLADO POR MÓDULOS
 // ============================================================
 
 document.addEventListener("DOMContentLoaded", function () {
-    const path = window.location.pathname;
-    let paginaActual = path.substring(path.lastIndexOf('/') + 1);
+  const path = window.location.pathname;
+  let paginaActual = path.substring(path.lastIndexOf("/") + 1);
 
-    if (paginaActual === '' || paginaActual === 'login.html' || paginaActual === 'index.html' || !localStorage.getItem('idUsuarioERP')) {
-        return;
-    }
+  if (paginaActual === "" || paginaActual === "login.html" || paginaActual === "index.html" || !localStorage.getItem("idUsuarioERP")) {
+    return;
+  }
 
-    let moduloActual = "general";
-    if (paginaActual.includes("compras")) moduloActual = "compras";
-    else if (paginaActual.includes("ventas")) moduloActual = "ventas";
-    else if (paginaActual.includes("inventario")) moduloActual = "inventario";
-    else if (paginaActual.includes("produccion")) moduloActual = "produccion";
-    else if (paginaActual.includes("talento")) moduloActual = "talento_humano";
-    else if (paginaActual.includes("activos")) moduloActual = "activos";
-    else if (paginaActual.includes("auditoria")) moduloActual = "auditoria";
+  let moduloActual = "general";
 
-    const chatHTML = `
-        <div class="ia-floating-btn" id="btnAbrirChatIA" title="Asistente de IA de ${moduloActual.toUpperCase()}">
-            🤖
+  if (paginaActual.includes("compras")) moduloActual = "compras";
+  else if (paginaActual.includes("ventas")) moduloActual = "ventas";
+  else if (paginaActual.includes("inventario")) moduloActual = "inventario";
+  else if (paginaActual.includes("produccion")) moduloActual = "produccion";
+  else if (paginaActual.includes("talento")) moduloActual = "talento_humano";
+  else if (paginaActual.includes("activos")) moduloActual = "activos";
+  else if (paginaActual.includes("auditoria")) moduloActual = "auditoria";
+
+  const chatHTML = `
+    <div class="ia-floating-btn" id="btnAbrirChatIA" title="Asistente de IA de ${moduloActual.toUpperCase()}">
+      🤖
+    </div>
+    <div class="ia-chat-window" id="ventanaChatIA">
+      <div class="ia-chat-header">
+        <span>Asistente Don Guillo (${moduloActual.toUpperCase()})</span>
+        <button class="ia-close-btn" id="btnCerrarChatIA">&times;</button>
+      </div>
+      <div class="ia-chat-body" id="cuerpoChatIA">
+        <div class="ia-message bot">
+          Hola ${localStorage.getItem("nombresERP") || ""}, soy la IA operativa del módulo de <strong>${moduloActual.toUpperCase()}</strong>. ¿En qué te puedo ayudar hoy?
         </div>
-        <div class="ia-chat-window" id="ventanaChatIA">
-            <div class="ia-chat-header">
-                <span>Asistente Don Guillo (${moduloActual.toUpperCase()})</span>
-                <button class="ia-close-btn" id="btnCerrarChatIA">&times;</button>
-            </div>
-            <div class="ia-chat-body" id="cuerpoChatIA">
-                <div class="ia-message bot">
-                    Hola ${localStorage.getItem('nombresERP') || ''}, soy la IA operativa del módulo de <strong>${moduloActual.toUpperCase()}</strong>. ¿En qué te puedo ayudar hoy?
-                </div>
-            </div>
-            <div class="ia-loading" id="iaCargando">La IA está analizando los datos...</div>
-            <div class="ia-chat-footer">
-                <input type="text" class="ia-chat-input" id="inputMensajeIA" placeholder="Escribe tu consulta...">
-                <button class="ia-send-btn" id="btnEnviarMensajeIA">➤</button>
-            </div>
-        </div>
-    `;
-    document.body.insertAdjacentHTML('beforeend', chatHTML);
+      </div>
+      <div class="ia-loading" id="iaCargando">La IA está analizando los datos...</div>
+      <div class="ia-chat-footer">
+        <input type="text" class="ia-chat-input" id="inputMensajeIA" placeholder="Escribe tu consulta...">
+        <button class="ia-send-btn" id="btnEnviarMensajeIA">➤</button>
+      </div>
+    </div>
+  `;
 
-    const btnAbrirChatIA = document.getElementById("btnAbrirChatIA");
-    const btnCerrarChatIA = document.getElementById("btnCerrarChatIA");
-    const ventanaChatIA = document.getElementById("ventanaChatIA");
-    const cuerpoChatIA = document.getElementById("cuerpoChatIA");
-    const inputMensajeIA = document.getElementById("inputMensajeIA");
-    const btnEnviarMensajeIA = document.getElementById("btnEnviarMensajeIA");
-    const iaCargando = document.getElementById("iaCargando");
+  document.body.insertAdjacentHTML("beforeend", chatHTML);
 
-    // Seguro por si otro script intenta deshabilitarlo de nuevo
-    inputMensajeIA.disabled = false;
+  const btnAbrirChatIA = document.getElementById("btnAbrirChatIA");
+  const btnCerrarChatIA = document.getElementById("btnCerrarChatIA");
+  const ventanaChatIA = document.getElementById("ventanaChatIA");
+  const cuerpoChatIA = document.getElementById("cuerpoChatIA");
+  const inputMensajeIA = document.getElementById("inputMensajeIA");
+  const btnEnviarMensajeIA = document.getElementById("btnEnviarMensajeIA");
+  const iaCargando = document.getElementById("iaCargando");
 
-    btnAbrirChatIA.addEventListener("click", () => {
-        ventanaChatIA.classList.add("show");
-        inputMensajeIA.focus();
-    });
-    btnCerrarChatIA.addEventListener("click", () => ventanaChatIA.classList.remove("show"));
+  // Seguro por si otro script intenta deshabilitarlo de nuevo
+  inputMensajeIA.disabled = false;
 
-    function agregarMensaje(texto, tipo) {
-        let textoFormateado = texto.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\n/g, '<br>');
-        
-        const divMensaje = document.createElement("div");
-        divMensaje.className = `ia-message ${tipo}`;
-        divMensaje.innerHTML = textoFormateado;
-        cuerpoChatIA.appendChild(divMensaje);
-        cuerpoChatIA.scrollTop = cuerpoChatIA.scrollHeight;
+  btnAbrirChatIA.addEventListener("click", () => {
+    ventanaChatIA.classList.add("show");
+    inputMensajeIA.focus();
+  });
+
+  btnCerrarChatIA.addEventListener("click", () => ventanaChatIA.classList.remove("show"));
+
+  function agregarMensaje(texto, tipo) {
+    let textoFormateado = texto
+      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\n/g, "<br>");
+
+    const divMensaje = document.createElement("div");
+    divMensaje.className = `ia-message ${tipo}`;
+    divMensaje.innerHTML = textoFormateado;
+    cuerpoChatIA.appendChild(divMensaje);
+    cuerpoChatIA.scrollTop = cuerpoChatIA.scrollHeight;
+  }
+
+  async function enviarConsultaIA() {
+    const pregunta = inputMensajeIA.value.trim();
+    if (!pregunta) return;
+
+    agregarMensaje(pregunta, "user");
+    inputMensajeIA.value = "";
+    iaCargando.style.display = "block";
+
+    try {
+      const respuesta = await window.apiPost("/api/ia/consultar", {
+        pregunta: pregunta,
+        usuario: localStorage.getItem("usuarioERP"),
+        perfil: localStorage.getItem("perfilERP"),
+        contexto_modulo: moduloActual,
+      });
+
+      iaCargando.style.display = "none";
+
+      if (respuesta.estado === "bloqueado") {
+        agregarMensaje("🔒 " + respuesta.respuesta, "bot");
+      } else if (respuesta.estado === "exito") {
+        agregarMensaje(respuesta.respuesta, "bot");
+      } else {
+        agregarMensaje("❌ " + (respuesta.respuesta || "Error desconocido en el servidor."), "bot");
+      }
+
+    } catch (error) {
+      iaCargando.style.display = "none";
+      agregarMensaje("❌ Error de conexión con el Asistente.", "bot");
+      console.error(error);
     }
+  }
 
-    async function enviarConsultaIA() {
-        const pregunta = inputMensajeIA.value.trim();
-        if (!pregunta) return;
+  btnEnviarMensajeIA.addEventListener("click", enviarConsultaIA);
 
-        agregarMensaje(pregunta, "user");
-        inputMensajeIA.value = "";
-        iaCargando.style.display = "block";
-
-        try {
-            const respuesta = await window.apiPost("/api/ia/consultar", {
-                pregunta: pregunta,
-                usuario: localStorage.getItem("usuarioERP"),
-                perfil: localStorage.getItem("perfilERP"),
-                contexto_modulo: moduloActual
-            });
-
-            iaCargando.style.display = "none";
-
-            if (respuesta.estado === "bloqueado") {
-                agregarMensaje("🔒 " + respuesta.respuesta, "bot");
-            } else if (respuesta.estado === "exito") {
-                agregarMensaje(respuesta.respuesta, "bot");
-            } else {
-                agregarMensaje("❌ " + (respuesta.respuesta || "Error desconocido en el servidor."), "bot");
-            }
-
-        } catch (error) {
-            iaCargando.style.display = "none";
-            agregarMensaje("❌ Error de conexión con el Asistente.", "bot");
-            console.error(error);
-        }
-    }
-
-    btnEnviarMensajeIA.addEventListener("click", enviarConsultaIA);
-    inputMensajeIA.addEventListener("keypress", function (e) {
-        if (e.key === "Enter") enviarConsultaIA();
-    });
+  inputMensajeIA.addEventListener("keypress", function (e) {
+    if (e.key === "Enter") enviarConsultaIA();
+  });
 });
