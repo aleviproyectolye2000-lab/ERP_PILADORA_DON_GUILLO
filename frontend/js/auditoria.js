@@ -14,7 +14,16 @@ let accionesFiltradasActuales = [];
 let paginaAccesos = 0;
 let paginaAcciones = 0;
 
+let auditoriaInicializada = false;
+
 const API_AUDITORIA_BASE = "";
+
+/*
+  IMPORTANTE:
+  El ingreso al módulo ya lo registra main.js con registrarAccionSistema().
+  Si también se registra aquí, se duplica INGRESO_MODULO.
+*/
+const REGISTRAR_INGRESO_AUDITORIA_DESDE_ESTE_ARCHIVO = false;
 
 /* ---------------------------------------------------- */
 /* SESIÓN ACTUAL                                        */
@@ -187,6 +196,16 @@ function normalizarTexto(valor) {
     .replace(/[\u0300-\u036f]/g, "");
 }
 
+function normalizarFiltroSelect(valor) {
+  const texto = normalizarTexto(valor);
+
+  if (texto === "todos" || texto === "todas" || texto === "todo" || texto === "toda") {
+    return "";
+  }
+
+  return texto;
+}
+
 /* ---------------------------------------------------- */
 /* FECHAS Y HORAS                                       */
 /* ---------------------------------------------------- */
@@ -251,6 +270,84 @@ function fechaActualTexto() {
 }
 
 /* ---------------------------------------------------- */
+/* NAVEGADOR / IP                                       */
+/* ---------------------------------------------------- */
+
+function obtenerIpAuditoria(registro) {
+  return registro.ip_equipo || registro.ip_cliente || registro.ip || "-";
+}
+
+function obtenerNavegadorAuditoria(registro) {
+  return registro.navegador || registro.user_agent || registro.agente_usuario || "-";
+}
+
+function resumirNavegador(navegador) {
+  const texto = textoSeguro(navegador);
+
+  if (!texto || texto === "-") {
+    return "-";
+  }
+
+  if (texto.includes("Edg/")) return "Microsoft Edge";
+  if (texto.includes("Chrome/")) return "Google Chrome";
+  if (texto.includes("Firefox/")) return "Mozilla Firefox";
+  if (texto.includes("Safari/") && !texto.includes("Chrome/")) return "Safari";
+  if (texto.length > 45) return `${texto.substring(0, 45)}...`;
+
+  return texto;
+}
+
+/* ---------------------------------------------------- */
+/* CABECERAS DINÁMICAS                                  */
+/* ---------------------------------------------------- */
+
+function asegurarColumnaCabecera(tablaBodyId, claveNormalizada, titulo) {
+  const tbody = document.getElementById(tablaBodyId);
+
+  if (!tbody) return;
+
+  const tabla = tbody.closest("table");
+
+  if (!tabla) return;
+
+  const filaCabecera = tabla.querySelector("thead tr");
+
+  if (!filaCabecera) return;
+
+  const existe = Array.from(filaCabecera.children).some((th) =>
+    normalizarTexto(th.textContent).includes(claveNormalizada)
+  );
+
+  if (!existe) {
+    const th = document.createElement("th");
+    th.textContent = titulo;
+    filaCabecera.appendChild(th);
+  }
+}
+
+function prepararCabecerasAuditoria() {
+  asegurarColumnaCabecera("tablaAuditoriaAccesos", "navegador", "Navegador");
+  asegurarColumnaCabecera("tablaAuditoriaAcciones", "ip", "IP");
+  asegurarColumnaCabecera("tablaAuditoriaAcciones", "navegador", "Navegador");
+}
+
+function obtenerTotalColumnasTabla(tablaBodyId, defecto) {
+  const tbody = document.getElementById(tablaBodyId);
+
+  if (!tbody) return defecto;
+
+  const tabla = tbody.closest("table");
+
+  if (!tabla) return defecto;
+
+  const filaCabecera = tabla.querySelector("thead tr");
+
+  if (!filaCabecera) return defecto;
+
+  return filaCabecera.children.length || defecto;
+}
+
+/* ---------------------------------------------------- */
 /* COLORES                                              */
 /* ---------------------------------------------------- */
 
@@ -310,6 +407,9 @@ function obtenerClaseAccion(accion) {
   if (texto.includes("EDITAR") || texto.includes("MODIFICAR") || texto.includes("ACTUALIZAR")) return "badge-accion accion-editar";
   if (texto.includes("ELIMINAR")) return "badge-accion accion-eliminar";
   if (texto.includes("ANULAR")) return "badge-accion accion-anular";
+  if (texto.includes("SUSPENDER") || texto.includes("INACTIVAR")) return "badge-accion accion-anular";
+  if (texto.includes("CAMBIO_SUELDO")) return "badge-accion accion-editar";
+  if (texto.includes("GENERAR_ROL")) return "badge-accion accion-reporte";
   if (texto.includes("REPORTE") || texto.includes("COMPROBANTE") || texto.includes("ARCHIVAR")) return "badge-accion accion-reporte";
   if (texto.includes("ERROR")) return "badge-accion accion-error";
 
@@ -326,7 +426,11 @@ function obtenerClaseFilaAccion(accion) {
     texto.includes("ANULAR") ||
     texto.includes("EDITAR") ||
     texto.includes("MODIFICAR") ||
-    texto.includes("ACTUALIZAR")
+    texto.includes("ACTUALIZAR") ||
+    texto.includes("SUSPENDER") ||
+    texto.includes("INACTIVAR") ||
+    texto.includes("CAMBIO_SUELDO") ||
+    texto.includes("GENERAR_ROL")
   ) {
     return "fila-critica";
   }
@@ -406,12 +510,13 @@ async function cargarAccesosAuditoria() {
   try {
     const limite = obtenerLimiteRegistros();
     const offset = paginaAccesos * limite;
+    const totalColumnas = obtenerTotalColumnasTabla("tablaAuditoriaAccesos", 11);
 
     if (estadoCarga) estadoCarga.textContent = "Cargando accesos...";
 
     tabla.innerHTML = `
       <tr>
-        <td colspan="10" class="text-center text-muted">
+        <td colspan="${totalColumnas}" class="text-center text-muted">
           Cargando accesos...
         </td>
       </tr>
@@ -427,9 +532,11 @@ async function cargarAccesosAuditoria() {
 
     if (estadoCarga) estadoCarga.textContent = "Accesos cargados";
   } catch (error) {
+    const totalColumnas = obtenerTotalColumnasTabla("tablaAuditoriaAccesos", 11);
+
     tabla.innerHTML = `
       <tr>
-        <td colspan="10" class="text-center text-danger">
+        <td colspan="${totalColumnas}" class="text-center text-danger">
           Error al cargar accesos: ${escaparHtml(error.message)}
         </td>
       </tr>
@@ -448,12 +555,13 @@ async function cargarAccionesAuditoria() {
   try {
     const limite = obtenerLimiteRegistros();
     const offset = paginaAcciones * limite;
+    const totalColumnas = obtenerTotalColumnasTabla("tablaAuditoriaAcciones", 12);
 
     if (estadoCarga) estadoCarga.textContent = "Cargando acciones...";
 
     tabla.innerHTML = `
       <tr>
-        <td colspan="10" class="text-center text-muted">
+        <td colspan="${totalColumnas}" class="text-center text-muted">
           Cargando acciones...
         </td>
       </tr>
@@ -469,9 +577,11 @@ async function cargarAccionesAuditoria() {
 
     if (estadoCarga) estadoCarga.textContent = "Auditoría cargada correctamente";
   } catch (error) {
+    const totalColumnas = obtenerTotalColumnasTabla("tablaAuditoriaAcciones", 12);
+
     tabla.innerHTML = `
       <tr>
-        <td colspan="10" class="text-center text-danger">
+        <td colspan="${totalColumnas}" class="text-center text-danger">
           Error al cargar acciones: ${escaparHtml(error.message)}
         </td>
       </tr>
@@ -481,14 +591,40 @@ async function cargarAccionesAuditoria() {
   }
 }
 
+async function cargarResumenGeneralAuditoria() {
+  try {
+    const resumen = await consumirApiAuditoria("/api/auditoria/resumen");
+
+    const usuariosConectados = document.getElementById("usuariosConectados");
+    const ingresosRegistrados = document.getElementById("ingresosRegistrados");
+    const accionesRegistradas = document.getElementById("accionesRegistradas");
+    const accesosDenegados = document.getElementById("accesosDenegados");
+    const accionesCriticas = document.getElementById("accionesCriticas");
+    const ultimoAcceso = document.getElementById("ultimoAcceso");
+
+    if (usuariosConectados) usuariosConectados.textContent = resumen.usuarios_conectados ?? 0;
+    if (ingresosRegistrados) ingresosRegistrados.textContent = resumen.ingresos_registrados ?? 0;
+    if (accionesRegistradas) accionesRegistradas.textContent = resumen.acciones_registradas ?? 0;
+    if (accesosDenegados) accesosDenegados.textContent = resumen.accesos_denegados ?? 0;
+    if (accionesCriticas) accionesCriticas.textContent = resumen.acciones_criticas ?? 0;
+    if (ultimoAcceso) ultimoAcceso.textContent = resumen.ultimo_acceso || "Sin datos";
+  } catch (error) {
+    console.warn("No se pudo cargar resumen general desde backend:", error);
+    actualizarResumenAuditoria();
+  }
+}
+
 async function recargarAuditoriaCompleta() {
   const estadoCarga = document.getElementById("estadoCargaAuditoria");
 
   if (estadoCarga) estadoCarga.textContent = "Recargando auditoría...";
 
+  prepararCabecerasAuditoria();
+
   await cargarAccesosAuditoria();
   await cargarAccionesAuditoria();
   await cargarResumenMantenimientoAuditoria();
+  await cargarResumenGeneralAuditoria();
 
   if (estadoCarga) estadoCarga.textContent = "Auditoría recargada correctamente";
 }
@@ -503,12 +639,14 @@ function renderizarAccesosAuditoria(listaAccesos) {
 
   if (!tabla) return;
 
+  const totalColumnas = obtenerTotalColumnasTabla("tablaAuditoriaAccesos", 11);
+
   if (contador) contador.textContent = `${listaAccesos.length} registros`;
 
   if (!listaAccesos || listaAccesos.length === 0) {
     tabla.innerHTML = `
       <tr>
-        <td colspan="10" class="text-center text-muted">
+        <td colspan="${totalColumnas}" class="text-center text-muted">
           No existen accesos registrados con los filtros aplicados.
         </td>
       </tr>
@@ -524,9 +662,11 @@ function renderizarAccesosAuditoria(listaAccesos) {
     const usuario = obtenerUsuarioAcceso(acceso);
     const perfil = obtenerPerfilAcceso(acceso);
     const estadoSesion = obtenerEstadoAcceso(acceso);
+    const navegador = obtenerNavegadorAuditoria(acceso);
 
     const fila = document.createElement("tr");
     fila.className = obtenerClaseFilaAcceso(estadoSesion);
+    fila.title = `Navegador: ${navegador}`;
 
     fila.innerHTML = `
       <td>${escaparHtml(acceso.id_acceso)}</td>
@@ -539,10 +679,11 @@ function renderizarAccesosAuditoria(listaAccesos) {
       <td>${escaparHtml(acceso.fecha_salida)}</td>
       <td>${escaparHtml(formatearHora(acceso.hora_salida))}</td>
       <td>${escaparHtml(formatearTiempoConectado(acceso.tiempo_conectado))}</td>
-      <td>${escaparHtml(acceso.ip_equipo)}</td>
+      <td>${escaparHtml(obtenerIpAuditoria(acceso))}</td>
       <td>
         <span class="${obtenerClaseEstadoSesion(estadoSesion)}">${escaparHtml(estadoSesion)}</span>
       </td>
+      <td title="${escaparHtml(navegador)}">${escaparHtml(resumirNavegador(navegador))}</td>
     `;
 
     tabla.appendChild(fila);
@@ -557,12 +698,14 @@ function renderizarAccionesAuditoria(listaAcciones) {
 
   if (!tabla) return;
 
+  const totalColumnas = obtenerTotalColumnasTabla("tablaAuditoriaAcciones", 12);
+
   if (contador) contador.textContent = `${listaAcciones.length} registros`;
 
   if (!listaAcciones || listaAcciones.length === 0) {
     tabla.innerHTML = `
       <tr>
-        <td colspan="10" class="text-center text-muted">
+        <td colspan="${totalColumnas}" class="text-center text-muted">
           No existen acciones registradas con los filtros aplicados.
         </td>
       </tr>
@@ -579,9 +722,12 @@ function renderizarAccionesAuditoria(listaAcciones) {
     const perfil = obtenerPerfilAccion(accion);
     const modulo = accion.modulo || "-";
     const accionTexto = accion.accion || "-";
+    const ipEquipo = obtenerIpAuditoria(accion);
+    const navegador = obtenerNavegadorAuditoria(accion);
 
     const fila = document.createElement("tr");
     fila.className = obtenerClaseFilaAccion(accionTexto);
+    fila.title = `IP: ${ipEquipo} | Navegador: ${navegador}`;
 
     fila.innerHTML = `
       <td>${escaparHtml(obtenerIdAccion(accion))}</td>
@@ -600,6 +746,8 @@ function renderizarAccionesAuditoria(listaAcciones) {
       <td>${escaparHtml(accion.id_registro_afectado)}</td>
       <td>${escaparHtml(accion.fecha_accion)}</td>
       <td>${escaparHtml(formatearHora(accion.hora_accion))}</td>
+      <td>${escaparHtml(ipEquipo)}</td>
+      <td title="${escaparHtml(navegador)}">${escaparHtml(resumirNavegador(navegador))}</td>
     `;
 
     tabla.appendChild(fila);
@@ -611,6 +759,23 @@ function renderizarAccionesAuditoria(listaAcciones) {
 /* ---------------------------------------------------- */
 /* RESUMEN PRINCIPAL                                    */
 /* ---------------------------------------------------- */
+
+function esAccionCriticaAuditoria(accion) {
+  const accionTexto = normalizarTexto(accion).toUpperCase();
+
+  return (
+    accionTexto.includes("ELIMINAR") ||
+    accionTexto.includes("ANULAR") ||
+    accionTexto.includes("EDITAR") ||
+    accionTexto.includes("MODIFICAR") ||
+    accionTexto.includes("ACTUALIZAR") ||
+    accionTexto.includes("SUSPENDER") ||
+    accionTexto.includes("INACTIVAR") ||
+    accionTexto.includes("CAMBIO_SUELDO") ||
+    accionTexto.includes("GENERAR_ROL") ||
+    accionTexto.includes("ACCESO_DENEGADO")
+  );
+}
 
 function actualizarResumenAuditoria() {
   const usuariosConectados = document.getElementById("usuariosConectados");
@@ -630,19 +795,11 @@ function actualizarResumenAuditoria() {
 
   const denegados = accionesParaResumen.filter((accion) => {
     const accionTexto = normalizarTexto(accion.accion).toUpperCase();
-    return accionTexto.includes("ACCESO_DENEGADO");
+    return accionTexto.includes("ACCESO_DENEGADO") || accionTexto.includes("DENEGADO");
   });
 
   const criticas = accionesParaResumen.filter((accion) => {
-    const accionTexto = normalizarTexto(accion.accion).toUpperCase();
-
-    return (
-      accionTexto.includes("ELIMINAR") ||
-      accionTexto.includes("ANULAR") ||
-      accionTexto.includes("EDITAR") ||
-      accionTexto.includes("MODIFICAR") ||
-      accionTexto.includes("ACTUALIZAR")
-    );
+    return esAccionCriticaAuditoria(accion.accion);
   });
 
   if (usuariosConectados) usuariosConectados.textContent = sesionesActivas.length;
@@ -661,17 +818,17 @@ function actualizarResumenAuditoria() {
 }
 
 /* ---------------------------------------------------- */
-/* FILTROS                                               */
+/* FILTROS                                              */
 /* ---------------------------------------------------- */
 
 function aplicarFiltrosAuditoria() {
   const filtroUsuario = normalizarTexto(document.getElementById("filtroUsuario")?.value || "");
-  const filtroPerfil = normalizarTexto(document.getElementById("filtroPerfil")?.value || "");
-  const filtroModulo = normalizarTexto(document.getElementById("filtroModulo")?.value || "");
-  const filtroAccion = normalizarTexto(document.getElementById("filtroAccion")?.value || "").toUpperCase();
+  const filtroPerfil = normalizarFiltroSelect(document.getElementById("filtroPerfil")?.value || "");
+  const filtroModulo = normalizarFiltroSelect(document.getElementById("filtroModulo")?.value || "");
+  const filtroAccion = normalizarFiltroSelect(document.getElementById("filtroAccion")?.value || "").toUpperCase();
   const filtroFechaDesde = document.getElementById("filtroFechaDesde")?.value || "";
   const filtroFechaHasta = document.getElementById("filtroFechaHasta")?.value || "";
-  const filtroEstadoSesion = normalizarTexto(document.getElementById("filtroEstadoSesion")?.value || "");
+  const filtroEstadoSesion = normalizarFiltroSelect(document.getElementById("filtroEstadoSesion")?.value || "");
 
   accesosFiltradosActuales = accesosAuditoria.filter((acceso) => {
     const usuario = normalizarTexto(obtenerUsuarioAcceso(acceso));
@@ -734,12 +891,14 @@ function limpiarFiltrosAuditoria() {
   renderizarAccesosAuditoria(accesosFiltradosActuales);
   renderizarAccionesAuditoria(accionesFiltradasActuales);
 
+  cargarResumenGeneralAuditoria();
+
   const estadoCarga = document.getElementById("estadoCargaAuditoria");
   if (estadoCarga) estadoCarga.textContent = "Filtros limpiados";
 }
 
 /* ---------------------------------------------------- */
-/* PAGINACIÓN                                            */
+/* PAGINACIÓN                                           */
 /* ---------------------------------------------------- */
 
 function actualizarTextoPaginacion() {
@@ -759,6 +918,7 @@ async function paginaAnteriorAccesos() {
   if (paginaAccesos > 0) {
     paginaAccesos--;
     await cargarAccesosAuditoria();
+    await cargarResumenGeneralAuditoria();
   }
 }
 
@@ -770,12 +930,15 @@ async function paginaSiguienteAccesos() {
     paginaAccesos--;
     await cargarAccesosAuditoria();
   }
+
+  await cargarResumenGeneralAuditoria();
 }
 
 async function paginaAnteriorAcciones() {
   if (paginaAcciones > 0) {
     paginaAcciones--;
     await cargarAccionesAuditoria();
+    await cargarResumenGeneralAuditoria();
   }
 }
 
@@ -787,6 +950,8 @@ async function paginaSiguienteAcciones() {
     paginaAcciones--;
     await cargarAccionesAuditoria();
   }
+
+  await cargarResumenGeneralAuditoria();
 }
 
 async function reiniciarPaginacionYCargar() {
@@ -797,7 +962,7 @@ async function reiniciarPaginacionYCargar() {
 }
 
 /* ---------------------------------------------------- */
-/* COMPROBANTE                                           */
+/* COMPROBANTE                                          */
 /* ---------------------------------------------------- */
 
 function obtenerDescripcionFiltros() {
@@ -814,7 +979,7 @@ function obtenerDescripcionFiltros() {
 
 function generarFilasComprobanteAccesos() {
   if (!accesosFiltradosActuales || accesosFiltradosActuales.length === 0) {
-    return `<tr><td colspan="8" style="text-align:center;">No existen accesos registrados.</td></tr>`;
+    return `<tr><td colspan="10" style="text-align:center;">No existen accesos registrados.</td></tr>`;
   }
 
   return accesosFiltradosActuales.map((acceso) => `
@@ -826,6 +991,8 @@ function generarFilasComprobanteAccesos() {
       <td>${escaparHtml(formatearHora(acceso.hora_ingreso))}</td>
       <td>${escaparHtml(acceso.fecha_salida)}</td>
       <td>${escaparHtml(formatearHora(acceso.hora_salida))}</td>
+      <td>${escaparHtml(formatearTiempoConectado(acceso.tiempo_conectado))}</td>
+      <td>${escaparHtml(obtenerIpAuditoria(acceso))}</td>
       <td>${escaparHtml(obtenerEstadoAcceso(acceso))}</td>
     </tr>
   `).join("");
@@ -833,7 +1000,7 @@ function generarFilasComprobanteAccesos() {
 
 function generarFilasComprobanteAcciones() {
   if (!accionesFiltradasActuales || accionesFiltradasActuales.length === 0) {
-    return `<tr><td colspan="8" style="text-align:center;">No existen acciones registradas.</td></tr>`;
+    return `<tr><td colspan="10" style="text-align:center;">No existen acciones registradas.</td></tr>`;
   }
 
   return accionesFiltradasActuales.map((accion) => `
@@ -844,8 +1011,10 @@ function generarFilasComprobanteAcciones() {
       <td>${escaparHtml(accion.modulo)}</td>
       <td>${escaparHtml(accion.accion)}</td>
       <td>${escaparHtml(accion.descripcion)}</td>
-      <td>${escaparHtml(accion.fecha_accion)}</td>
-      <td>${escaparHtml(formatearHora(accion.hora_accion))}</td>
+      <td>${escaparHtml(accion.tabla_afectada)}</td>
+      <td>${escaparHtml(accion.id_registro_afectado)}</td>
+      <td>${escaparHtml(obtenerIpAuditoria(accion))}</td>
+      <td>${escaparHtml(accion.fecha_accion)} ${escaparHtml(formatearHora(accion.hora_accion))}</td>
     </tr>
   `).join("");
 }
@@ -872,15 +1041,7 @@ async function generarComprobanteAuditoria() {
   ).length;
 
   const totalCriticas = accionesFiltradasActuales.filter((accion) => {
-    const texto = normalizarTexto(accion.accion).toUpperCase();
-
-    return (
-      texto.includes("ELIMINAR") ||
-      texto.includes("ANULAR") ||
-      texto.includes("EDITAR") ||
-      texto.includes("MODIFICAR") ||
-      texto.includes("ACTUALIZAR")
-    );
+    return esAccionCriticaAuditoria(accion.accion);
   }).length;
 
   const contenido = `
@@ -899,9 +1060,9 @@ async function generarComprobanteAuditoria() {
           .resumen { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
           .resumen div { border: 1px solid #ccc; border-left: 5px solid #198754; padding: 10px; border-radius: 6px; }
           .resumen strong { display: block; font-size: 22px; color: #198754; }
-          table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 11px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 10px; }
           th { background: #198754; color: white; padding: 6px; border: 1px solid #0f5132; }
-          td { padding: 5px; border: 1px solid #ccc; }
+          td { padding: 5px; border: 1px solid #ccc; vertical-align: top; }
           .nota { font-size: 12px; color: #555; margin-top: 20px; }
           .firma { margin-top: 45px; display: flex; justify-content: space-between; }
           .firma div { width: 40%; text-align: center; border-top: 1px solid #333; padding-top: 6px; font-size: 12px; }
@@ -946,6 +1107,8 @@ async function generarComprobanteAuditoria() {
                 <th>Hora ingreso</th>
                 <th>Fecha salida</th>
                 <th>Hora salida</th>
+                <th>Tiempo</th>
+                <th>IP</th>
                 <th>Estado</th>
               </tr>
             </thead>
@@ -964,8 +1127,10 @@ async function generarComprobanteAuditoria() {
                 <th>Módulo</th>
                 <th>Acción</th>
                 <th>Descripción</th>
-                <th>Fecha</th>
-                <th>Hora</th>
+                <th>Tabla afectada</th>
+                <th>ID registro</th>
+                <th>IP</th>
+                <th>Fecha y hora</th>
               </tr>
             </thead>
             <tbody>${generarFilasComprobanteAcciones()}</tbody>
@@ -1009,7 +1174,7 @@ async function generarComprobanteAuditoria() {
 }
 
 /* ---------------------------------------------------- */
-/* MANTENIMIENTO DE AUDITORÍA                            */
+/* MANTENIMIENTO DE AUDITORÍA                           */
 /* ---------------------------------------------------- */
 
 async function cargarResumenMantenimientoAuditoria() {
@@ -1155,14 +1320,23 @@ async function registrarAuditoriaAutomatica(
 
 window.registrarAuditoriaAutomatica = registrarAuditoriaAutomatica;
 
+if (!window.registrarAccionSistema) {
+  window.registrarAccionSistema = registrarAuditoriaAutomatica;
+}
+
 /* ---------------------------------------------------- */
 /* INICIALIZAR MÓDULO                                   */
 /* ---------------------------------------------------- */
 
 document.addEventListener("DOMContentLoaded", async function () {
+  if (auditoriaInicializada) return;
+  auditoriaInicializada = true;
+
   const accesoPermitido = validarAccesoAuditoria();
 
   if (!accesoPermitido) return;
+
+  prepararCabecerasAuditoria();
 
   const btnAplicarFiltros = document.getElementById("btnAplicarFiltros");
   const btnLimpiarFiltros = document.getElementById("btnLimpiarFiltros");
@@ -1208,11 +1382,13 @@ document.addEventListener("DOMContentLoaded", async function () {
 
   await recargarAuditoriaCompleta();
 
-  await registrarAuditoriaAutomatica(
-    "Auditoría",
-    "INGRESO_MODULO",
-    "El usuario ingresó al módulo Auditoría.",
-    "auditoria_acciones",
-    null
-  );
+  if (REGISTRAR_INGRESO_AUDITORIA_DESDE_ESTE_ARCHIVO) {
+    await registrarAuditoriaAutomatica(
+      "Auditoría",
+      "INGRESO_MODULO",
+      "El usuario ingresó al módulo Auditoría.",
+      "auditoria_acciones",
+      null
+    );
+  }
 });
