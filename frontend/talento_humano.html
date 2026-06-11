@@ -12,7 +12,7 @@
     <link rel="stylesheet" href="css/style.css" />
   </head>
 
-  <body>
+  <body data-fecha-minima-empresa="2020-01-01">
     <div class="d-flex">
       <aside class="sidebar">
         <h4 class="text-white fw-bold text-center mb-4">Don Guillo</h4>
@@ -109,6 +109,13 @@
               </button>
             </div>
 
+            <div class="alert alert-success py-2">
+              <strong>Regla de Talento Humano:</strong>
+              el cargo determina automáticamente el área y el sueldo base.
+              El área y el sueldo no se editan manualmente desde este formulario.
+              Para cambiar un sueldo se debe usar la opción de modificación autorizada.
+            </div>
+
             <form id="formTalentoHumano" class="row g-3">
               <input type="hidden" id="idEmpleadoEditar" />
 
@@ -121,7 +128,8 @@
                   maxlength="10"
                   minlength="10"
                   pattern="^\d{10}$"
-                  title="Debe ingresar exactamente 10 dígitos (solo números)"
+                  inputmode="numeric"
+                  title="Debe ingresar exactamente 10 dígitos, solo números"
                   required
                 />
               </div>
@@ -132,6 +140,7 @@
                   type="text"
                   class="form-control"
                   id="nombresEmpleado"
+                  maxlength="80"
                   pattern="^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$"
                   title="Solo se permiten letras y espacios"
                   required
@@ -144,6 +153,7 @@
                   type="text"
                   class="form-control"
                   id="apellidosEmpleado"
+                  maxlength="80"
                   pattern="^[A-Za-zÁÉÍÓÚáéíóúÑñ\s]+$"
                   title="Solo se permiten letras y espacios"
                   required
@@ -159,6 +169,7 @@
                   maxlength="10"
                   minlength="10"
                   pattern="^09\d{8}$"
+                  inputmode="numeric"
                   title="Debe empezar con 09 y tener 10 dígitos en total"
                   required
                 />
@@ -179,22 +190,85 @@
                 <label class="form-label">Cargo</label>
                 <select class="form-select" id="cargoEmpleado" required>
                   <option value="">Seleccione</option>
-                  <option value="Operador de báscula">Operador de báscula</option>
-                  <option value="Operador de piladora">Operador de piladora</option>
-                  <option value="Supervisor de Producción">Supervisor de Producción</option>
-                  <option value="Bodeguero">Bodeguero</option>
-                  <option value="Vendedor">Vendedor</option>
-                  <option value="Chofer">Chofer</option>
-                  <option value="Administrador">Administrador</option>
-                  <option value="Personal de campo">Personal de campo</option>
-                  <option value="Guardia">Guardia</option>
+                  <option
+                    value="Operador de báscula"
+                    data-area="Báscula y compras"
+                    data-sueldo="500.00"
+                  >
+                    Operador de báscula
+                  </option>
+                  <option
+                    value="Operador de piladora"
+                    data-area="Producción"
+                    data-sueldo="600.00"
+                  >
+                    Operador de piladora
+                  </option>
+                  <option
+                    value="Supervisor de Producción"
+                    data-area="Producción"
+                    data-sueldo="700.00"
+                  >
+                    Supervisor de Producción
+                  </option>
+                  <option
+                    value="Bodeguero"
+                    data-area="Bodega"
+                    data-sueldo="500.00"
+                  >
+                    Bodeguero
+                  </option>
+                  <option
+                    value="Vendedor"
+                    data-area="Ventas"
+                    data-sueldo="470.00"
+                  >
+                    Vendedor
+                  </option>
+                  <option
+                    value="Chofer"
+                    data-area="Campo"
+                    data-sueldo="550.00"
+                  >
+                    Chofer
+                  </option>
+                  <option
+                    value="Administrador"
+                    data-area="Administración"
+                    data-sueldo="800.00"
+                  >
+                    Administrador
+                  </option>
+                  <option
+                    value="Personal de campo"
+                    data-area="Campo"
+                    data-sueldo="470.00"
+                  >
+                    Personal de campo
+                  </option>
+                  <option
+                    value="Guardia"
+                    data-area="Seguridad"
+                    data-sueldo="470.00"
+                  >
+                    Guardia
+                  </option>
                 </select>
+                <small class="text-muted">
+                  Al seleccionar el cargo se cargan área y sueldo.
+                </small>
               </div>
 
               <div class="col-md-3">
-                <label class="form-label">Área</label>
-                <select class="form-select" id="areaEmpleado" required>
-                  <option value="">Seleccione</option>
+                <label class="form-label">Área automática</label>
+                <select
+                  class="form-select"
+                  id="areaEmpleado"
+                  required
+                  disabled
+                  title="El área se asigna automáticamente según el cargo"
+                >
+                  <option value="">Seleccione cargo primero</option>
                   <option value="Báscula y compras">Báscula y compras</option>
                   <option value="Producción">Producción</option>
                   <option value="Bodega">Bodega</option>
@@ -203,18 +277,26 @@
                   <option value="Campo">Campo</option>
                   <option value="Seguridad">Seguridad</option>
                 </select>
+                <small class="text-muted">
+                  Campo bloqueado para evitar áreas incorrectas.
+                </small>
               </div>
 
               <div class="col-md-3">
-                <label class="form-label">Sueldo base</label>
+                <label class="form-label">Sueldo base automático</label>
                 <input
                   type="number"
                   step="0.01"
                   min="0"
                   class="form-control"
                   id="sueldoEmpleado"
+                  readonly
                   required
+                  title="El sueldo base se asigna automáticamente según el cargo"
                 />
+                <small class="text-muted">
+                  Para subir o modificar sueldo use autorización.
+                </small>
               </div>
 
               <div class="col-md-3">
@@ -223,8 +305,12 @@
                   type="date"
                   class="form-control"
                   id="fechaIngresoEmpleado"
+                  min="2020-01-01"
                   required
                 />
+                <small class="text-muted">
+                  Permitido desde 2020-01-01 hasta la fecha actual.
+                </small>
               </div>
 
               <div class="col-md-3">
@@ -289,6 +375,82 @@
           </div>
         </div>
 
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-warning text-dark">
+            <h5 class="mb-0">Modificar sueldo con autorización</h5>
+          </div>
+
+          <div class="card-body">
+            <p class="text-muted">
+              Esta opción se usa solamente cuando la empresa decide subir o corregir
+              el sueldo base de un empleado. El cambio debe quedar validado y auditado.
+            </p>
+
+            <form id="formCambioSueldo" class="row g-3">
+              <div class="col-md-3">
+                <label class="form-label">Empleado</label>
+                <select class="form-select" id="empleadoCambioSueldo" required>
+                  <option value="">Seleccione empleado</option>
+                </select>
+              </div>
+
+              <div class="col-md-2">
+                <label class="form-label">Sueldo actual</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control"
+                  id="sueldoActualCambio"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-2">
+                <label class="form-label">Nuevo sueldo</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control"
+                  id="nuevoSueldoCambio"
+                  required
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Motivo del cambio</label>
+                <input
+                  type="text"
+                  class="form-control"
+                  id="motivoCambioSueldo"
+                  maxlength="150"
+                  placeholder="Ejemplo: Aumento aprobado por gerencia"
+                  required
+                />
+              </div>
+
+              <div class="col-md-2">
+                <label class="form-label">Clave autorización</label>
+                <input
+                  type="password"
+                  class="form-control"
+                  id="claveAutorizacionSueldo"
+                  maxlength="50"
+                  placeholder="Clave admin"
+                  required
+                />
+              </div>
+
+              <div class="col-md-12">
+                <button type="submit" class="btn btn-warning">
+                  Guardar cambio autorizado
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
         <section class="mt-4 mb-4">
           <div class="card shadow-sm">
             <div class="card-header bg-success text-white">
@@ -301,6 +463,12 @@
                 Las horas extras y sanciones registradas aquí se usarán automáticamente
                 para generar el rol de pago.
               </p>
+
+              <div class="alert alert-info py-2">
+                <strong>Sanción:</strong>
+                puede ser 0% cuando no aplica, o de 1% a 100% cuando la empresa
+                decida aplicar descuento por atraso, falta u otra observación.
+              </div>
 
               <form id="formMarcarEntrada" class="row g-3 mb-4">
                 <div class="col-md-3">
@@ -316,6 +484,7 @@
                     type="date"
                     class="form-control"
                     id="fechaAsistencia"
+                    min="2020-01-01"
                     required
                   />
                 </div>
@@ -342,19 +511,34 @@
                 </div>
 
                 <div class="col-md-2">
-                  <label class="form-label">Sanción ($)</label>
+                  <label class="form-label">Sanción (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    max="100"
+                    class="form-control"
+                    id="sancionAsistencia"
+                    value="0"
+                    title="Ingrese 0 si no aplica sanción, o un porcentaje entre 1 y 100"
+                  />
+                </div>
+
+                <div class="col-md-1">
+                  <label class="form-label">Valor</label>
                   <input
                     type="number"
                     step="0.01"
                     min="0"
                     class="form-control"
-                    id="sancionAsistencia"
+                    id="valorSancionAsistencia"
                     value="0"
+                    readonly
                   />
                 </div>
 
                 <div class="col-md-8">
-                  <label class="form-label">Observación</label>
+                  <label class="form-label">Observación / motivo de sanción</label>
                   <input
                     type="text"
                     class="form-control"
@@ -384,7 +568,8 @@
                       <th>Salida</th>
                       <th>Estado</th>
                       <th>Atraso</th>
-                      <th>Sanción</th>
+                      <th>Sanción (%)</th>
+                      <th>Valor sanción</th>
                       <th>Horas trabajadas</th>
                       <th>Horas extras</th>
                       <th>Acción</th>
@@ -392,7 +577,7 @@
                   </thead>
                   <tbody id="tablaAsistencia">
                     <tr>
-                      <td colspan="13" class="text-center">
+                      <td colspan="14" class="text-center">
                         Cargando asistencia...
                       </td>
                     </tr>
@@ -411,9 +596,17 @@
           <div class="card-body">
             <p class="text-muted">
               El rol de pago se genera automáticamente usando el sueldo del empleado,
-              las horas extras y sanciones registradas en asistencia. Las bonificaciones
-              y descuentos adicionales se ingresan manualmente si aplican.
+              las horas extras, sanciones registradas en asistencia y el aporte obligatorio
+              IESS del 9.45%. Las bonificaciones y descuentos adicionales se ingresan
+              manualmente si aplican.
             </p>
+
+            <div class="alert alert-success py-2">
+              <strong>Regla de cálculo:</strong>
+              cada hora extra vale por defecto $10.00. Si se desea modificar ese valor,
+              debe validarse con clave de autorización. El aporte IESS del empleado
+              se calcula automáticamente con el 9.45%.
+            </div>
 
             <form id="formRolPago" class="row g-3">
               <div class="col-md-4">
@@ -437,7 +630,57 @@
               <input type="hidden" id="sancionesRolPago" value="0" />
 
               <div class="col-md-2">
-                <label class="form-label">Bonificaciones</label>
+                <label class="form-label">Horas extras</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control"
+                  id="totalHorasExtrasRolPago"
+                  value="0"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-2">
+                <label class="form-label">Valor hora extra</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control"
+                  id="valorHoraExtraRolPago"
+                  value="10.00"
+                  required
+                />
+              </div>
+
+              <div class="col-md-2">
+                <label class="form-label">Clave autorización H.E.</label>
+                <input
+                  type="password"
+                  class="form-control"
+                  id="claveAutorizacionHoraExtra"
+                  maxlength="50"
+                  placeholder="Solo si modifica"
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Bonificación horas extras</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control"
+                  id="bonificacionHorasExtrasRolPago"
+                  value="0"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Bonificaciones adicionales</label>
                 <input
                   type="number"
                   step="0.01"
@@ -448,8 +691,34 @@
                 />
               </div>
 
-              <div class="col-md-2">
-                <label class="form-label">Descuentos</label>
+              <div class="col-md-3">
+                <label class="form-label">Sanciones</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control"
+                  id="sancionesCalculadasRolPago"
+                  value="0"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Aporte IESS 9.45%</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control"
+                  id="aporteIessRolPago"
+                  value="0"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Otros descuentos</label>
                 <input
                   type="number"
                   step="0.01"
@@ -457,6 +726,45 @@
                   class="form-control"
                   id="descuentosRolPago"
                   value="0"
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Total ingresos</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control"
+                  id="totalIngresosRolPago"
+                  value="0"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Total descuentos</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control"
+                  id="totalDescuentosRolPago"
+                  value="0"
+                  readonly
+                />
+              </div>
+
+              <div class="col-md-3">
+                <label class="form-label">Neto a pagar</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  class="form-control fw-bold"
+                  id="netoPagarRolPago"
+                  value="0"
+                  readonly
                 />
               </div>
 
@@ -494,17 +802,22 @@
                   <th>Periodo</th>
                   <th>Sueldo base</th>
                   <th>Horas extras</th>
+                  <th>Valor H.E.</th>
+                  <th>Bonificación H.E.</th>
                   <th>Bonificaciones</th>
                   <th>Sanciones</th>
-                  <th>Descuentos</th>
-                  <th>Total a pagar</th>
+                  <th>IESS 9.45%</th>
+                  <th>Otros descuentos</th>
+                  <th>Total ingresos</th>
+                  <th>Total descuentos</th>
+                  <th>Neto a pagar</th>
                   <th>Fecha generación</th>
                   <th>Comprobante</th>
                 </tr>
               </thead>
               <tbody id="tablaRolesPago">
                 <tr>
-                  <td colspan="11" class="text-center">
+                  <td colspan="16" class="text-center">
                     Cargando roles de pago...
                   </td>
                 </tr>
@@ -519,5 +832,105 @@
     <script src="js/main.js"></script>
     <script src="js/permisos.js"></script>
     <script src="js/talento_humano.js"></script>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const FECHA_MINIMA_EMPRESA = "2020-01-01";
+        const hoy = new Date().toISOString().split("T")[0];
+
+        const fechaIngresoEmpleado = document.getElementById("fechaIngresoEmpleado");
+        const fechaAsistencia = document.getElementById("fechaAsistencia");
+
+        if (fechaIngresoEmpleado) {
+          fechaIngresoEmpleado.min = FECHA_MINIMA_EMPRESA;
+          fechaIngresoEmpleado.max = hoy;
+        }
+
+        if (fechaAsistencia) {
+          fechaAsistencia.min = FECHA_MINIMA_EMPRESA;
+          fechaAsistencia.max = hoy;
+        }
+
+        const cargoEmpleado = document.getElementById("cargoEmpleado");
+        const areaEmpleado = document.getElementById("areaEmpleado");
+        const sueldoEmpleado = document.getElementById("sueldoEmpleado");
+
+        function aplicarDatosPorCargo() {
+          if (!cargoEmpleado || !areaEmpleado || !sueldoEmpleado) return;
+
+          const opcionSeleccionada =
+            cargoEmpleado.options[cargoEmpleado.selectedIndex];
+
+          const area = opcionSeleccionada?.dataset?.area || "";
+          const sueldo = opcionSeleccionada?.dataset?.sueldo || "";
+
+          areaEmpleado.value = area;
+          sueldoEmpleado.value = sueldo;
+        }
+
+        if (cargoEmpleado) {
+          cargoEmpleado.addEventListener("change", aplicarDatosPorCargo);
+        }
+
+        const formTalentoHumano = document.getElementById("formTalentoHumano");
+
+        if (formTalentoHumano) {
+          formTalentoHumano.addEventListener("reset", function () {
+            setTimeout(function () {
+              if (areaEmpleado) areaEmpleado.value = "";
+              if (sueldoEmpleado) sueldoEmpleado.value = "";
+            }, 0);
+          });
+
+          formTalentoHumano.addEventListener("submit", function (event) {
+            const fechaIngreso = fechaIngresoEmpleado?.value || "";
+
+            if (fechaIngreso && fechaIngreso < FECHA_MINIMA_EMPRESA) {
+              event.preventDefault();
+              alert(
+                "La fecha de ingreso no puede ser menor a 2020-01-01, fecha mínima permitida para la empresa."
+              );
+              return;
+            }
+
+            if (fechaIngreso && fechaIngreso > hoy) {
+              event.preventDefault();
+              alert("La fecha de ingreso no puede ser futura.");
+              return;
+            }
+
+            if (!cargoEmpleado?.value || !areaEmpleado?.value || !sueldoEmpleado?.value) {
+              event.preventDefault();
+              alert(
+                "Debe seleccionar un cargo válido para que el sistema asigne área y sueldo automáticamente."
+              );
+            }
+          });
+        }
+
+        const sancionAsistencia = document.getElementById("sancionAsistencia");
+
+        if (sancionAsistencia) {
+          sancionAsistencia.addEventListener("input", function () {
+            const valor = Number(sancionAsistencia.value || 0);
+
+            if (valor < 0) sancionAsistencia.value = 0;
+            if (valor > 100) sancionAsistencia.value = 100;
+          });
+        }
+
+        const valorHoraExtraRolPago = document.getElementById("valorHoraExtraRolPago");
+
+        if (valorHoraExtraRolPago) {
+          valorHoraExtraRolPago.addEventListener("input", function () {
+            const valor = Number(valorHoraExtraRolPago.value || 0);
+
+            if (valor < 0) {
+              valorHoraExtraRolPago.value = "10.00";
+            }
+          });
+        }
+      });
+    </script>
   </body>
 </html>

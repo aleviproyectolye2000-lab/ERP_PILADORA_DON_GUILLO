@@ -1,18 +1,78 @@
 /* ============================================================
    MÓDULO TALENTO HUMANO - ERP PILADORA DON GUILLO
    Empleados + Asistencia manual + Roles de pago
-   Validaciones reforzadas según talento_humano.html
+   Correcciones producción:
+   - Cargo asigna área y sueldo base automáticamente.
+   - Fecha mínima de ingreso/asistencia: 2020-01-01.
+   - Sanción por asistencia en porcentaje del 0% al 100%.
+   - Horas extras automáticas con valor por defecto de $10.
+   - Aporte IESS empleado 9.45% automático.
+   - Cambio de sueldo y cambio de valor hora extra con autorización.
 ============================================================ */
 
 document.addEventListener("DOMContentLoaded", function () {
   const API_TALENTO = "/api/talento-humano";
 
+  const FECHA_MINIMA_EMPRESA = document.body?.dataset?.fechaMinimaEmpresa || "2020-01-01";
+  const VALOR_HORA_EXTRA_DEFECTO = 10;
+  const PORCENTAJE_IESS_EMPLEADO = 9.45;
+
+  const CARGOS_OFICIALES = {
+    "Operador de báscula": {
+      area: "Báscula y compras",
+      sueldo: 500
+    },
+    "Operador de piladora": {
+      area: "Producción",
+      sueldo: 600
+    },
+    "Supervisor de Producción": {
+      area: "Producción",
+      sueldo: 700
+    },
+    Bodeguero: {
+      area: "Bodega",
+      sueldo: 500
+    },
+    Vendedor: {
+      area: "Ventas",
+      sueldo: 470
+    },
+    Chofer: {
+      area: "Campo",
+      sueldo: 550
+    },
+    Administrador: {
+      area: "Administración",
+      sueldo: 800
+    },
+    "Personal de campo": {
+      area: "Campo",
+      sueldo: 470
+    },
+    Guardia: {
+      area: "Seguridad",
+      sueldo: 470
+    }
+  };
+
+  const ALIAS_CARGOS = {
+    Operador: "Operador de piladora",
+    "Operador de Piladora": "Operador de piladora",
+    "Operador Piladora": "Operador de piladora",
+    "Operador de bascula": "Operador de báscula",
+    "Operador de Báscula": "Operador de báscula",
+    Supervisor: "Supervisor de Producción",
+    "Supervisor Producción": "Supervisor de Producción",
+    Bodega: "Bodeguero",
+    Ventas: "Vendedor",
+    Administrativo: "Administrador",
+    Campo: "Personal de campo",
+    Seguridad: "Guardia"
+  };
+
   let empleadosCache = [];
   let asistenciaCache = [];
-
-  // ============================================================
-  // ELEMENTOS: EMPLEADOS
-  // ============================================================
 
   const formTalentoHumano = document.getElementById("formTalentoHumano");
   const idEmpleadoEditar = document.getElementById("idEmpleadoEditar");
@@ -31,35 +91,41 @@ document.addEventListener("DOMContentLoaded", function () {
   const tituloFormularioEmpleado = document.getElementById("tituloFormularioEmpleado");
   const btnGuardarEmpleado = document.getElementById("btnGuardarEmpleado");
   const btnCancelarEdicionEmpleado = document.getElementById("btnCancelarEdicionEmpleado");
-
+  const btnLimpiarEmpleado = document.getElementById("btnLimpiarEmpleado");
   const tablaEmpleados = document.getElementById("tablaEmpleados");
 
-  // ============================================================
-  // ELEMENTOS: TARJETAS RESUMEN
-  // ============================================================
+  const formCambioSueldo = document.getElementById("formCambioSueldo");
+  const empleadoCambioSueldo = document.getElementById("empleadoCambioSueldo");
+  const sueldoActualCambio = document.getElementById("sueldoActualCambio");
+  const nuevoSueldoCambio = document.getElementById("nuevoSueldoCambio");
+  const motivoCambioSueldo = document.getElementById("motivoCambioSueldo");
+  const claveAutorizacionSueldo = document.getElementById("claveAutorizacionSueldo");
 
   const totalEmpleados = document.getElementById("totalEmpleados");
   const empleadosActivos = document.getElementById("empleadosActivos");
   const empleadosNoActivos = document.getElementById("empleadosNoActivos");
   const totalMensualSueldos = document.getElementById("totalMensualSueldos");
 
-  // ============================================================
-  // ELEMENTOS: ROLES DE PAGO
-  // ============================================================
-
   const formRolPago = document.getElementById("formRolPago");
   const empleadoRolPago = document.getElementById("empleadoRolPago");
   const periodoRolPago = document.getElementById("periodoRolPago");
+
   const horasExtrasRolPago = document.getElementById("horasExtrasRolPago");
-  const bonificacionesRolPago = document.getElementById("bonificacionesRolPago");
   const sancionesRolPago = document.getElementById("sancionesRolPago");
+
+  const totalHorasExtrasRolPago = document.getElementById("totalHorasExtrasRolPago");
+  const valorHoraExtraRolPago = document.getElementById("valorHoraExtraRolPago");
+  const claveAutorizacionHoraExtra = document.getElementById("claveAutorizacionHoraExtra");
+  const bonificacionHorasExtrasRolPago = document.getElementById("bonificacionHorasExtrasRolPago");
+  const bonificacionesRolPago = document.getElementById("bonificacionesRolPago");
+  const sancionesCalculadasRolPago = document.getElementById("sancionesCalculadasRolPago");
+  const aporteIessRolPago = document.getElementById("aporteIessRolPago");
   const descuentosRolPago = document.getElementById("descuentosRolPago");
+  const totalIngresosRolPago = document.getElementById("totalIngresosRolPago");
+  const totalDescuentosRolPago = document.getElementById("totalDescuentosRolPago");
+  const netoPagarRolPago = document.getElementById("netoPagarRolPago");
   const observacionRolPago = document.getElementById("observacionRolPago");
   const tablaRolesPago = document.getElementById("tablaRolesPago");
-
-  // ============================================================
-  // ELEMENTOS: ASISTENCIA MANUAL
-  // ============================================================
 
   const formMarcarEntrada = document.getElementById("formMarcarEntrada");
   const empleadoAsistencia = document.getElementById("empleadoAsistencia");
@@ -67,12 +133,9 @@ document.addEventListener("DOMContentLoaded", function () {
   const horaProgramadaEntrada = document.getElementById("horaProgramadaEntrada");
   const horaEntradaAsistencia = document.getElementById("horaEntradaAsistencia");
   const sancionAsistencia = document.getElementById("sancionAsistencia");
+  const valorSancionAsistencia = document.getElementById("valorSancionAsistencia");
   const observacionAsistencia = document.getElementById("observacionAsistencia");
   const tablaAsistencia = document.getElementById("tablaAsistencia");
-
-  // ============================================================
-  // FUNCIONES GENERALES
-  // ============================================================
 
   function obtenerFechaActualISO() {
     const fecha = new Date();
@@ -102,6 +165,10 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function formatearNumero(valor) {
     return Number(valor || 0).toFixed(2);
+  }
+
+  function redondearDos(valor) {
+    return Math.round((Number(valor || 0) + Number.EPSILON) * 100) / 100;
   }
 
   function limpiarTexto(texto) {
@@ -140,6 +207,15 @@ document.addEventListener("DOMContentLoaded", function () {
     if (estado === "Falta") return "bg-danger";
     if (estado === "Justificado") return "bg-info text-dark";
     return "bg-secondary";
+  }
+
+  function obtenerUsuarioSesion() {
+    return (
+      localStorage.getItem("usuarioERP") ||
+      localStorage.getItem("usuarioActualERP") ||
+      localStorage.getItem("nombreUsuarioERP") ||
+      "Usuario no identificado"
+    );
   }
 
   function validarCedulaEcuador(cedula) {
@@ -215,20 +291,241 @@ document.addEventListener("DOMContentLoaded", function () {
     return Number.isFinite(numero) && numero > 0;
   }
 
+  function normalizarCargo(cargo) {
+    const cargoLimpio = limpiarTexto(cargo);
+    return ALIAS_CARGOS[cargoLimpio] || cargoLimpio;
+  }
+
+  function obtenerConfigCargo(cargo) {
+    const cargoNormalizado = normalizarCargo(cargo);
+    return CARGOS_OFICIALES[cargoNormalizado] || null;
+  }
+
+  function obtenerEmpleadoPorId(idEmpleado) {
+    return empleadosCache.find((empleado) => Number(empleado.id_empleado) === Number(idEmpleado)) || null;
+  }
+
+  function obtenerNombreEmpleado(empleado) {
+    if (!empleado) return "Empleado no encontrado";
+    return limpiarTexto(`${empleado.nombres || ""} ${empleado.apellidos || ""}`) || "Empleado sin nombre";
+  }
+
+  function obtenerValorSancionRegistro(registro) {
+    return Number(
+      registro?.valor_sancion ??
+      registro?.valor_sancion_asistencia ??
+      registro?.sancion_valor ??
+      registro?.sancion ??
+      0
+    );
+  }
+
+  function obtenerPorcentajeSancionRegistro(registro) {
+    return Number(
+      registro?.sancion_porcentaje ??
+      registro?.porcentaje_sancion ??
+      registro?.porcentaje_sancion_asistencia ??
+      0
+    );
+  }
+
+  function obtenerHorasExtrasRegistro(registro) {
+    return Number(registro?.horas_extras ?? registro?.total_horas_extras ?? 0);
+  }
+
   function configurarLimitesFechas() {
     const fechaActual = obtenerFechaActualISO();
     const mesActual = obtenerMesActualISO();
 
     if (fechaIngresoEmpleado) {
+      fechaIngresoEmpleado.min = FECHA_MINIMA_EMPRESA;
       fechaIngresoEmpleado.max = fechaActual;
     }
 
     if (fechaAsistencia) {
+      fechaAsistencia.min = FECHA_MINIMA_EMPRESA;
       fechaAsistencia.max = fechaActual;
     }
 
     if (periodoRolPago) {
       periodoRolPago.max = mesActual;
+    }
+  }
+
+  function prepararFormularioCargoAreaSueldo() {
+    if (cargoEmpleado) {
+      const valorAnterior = normalizarCargo(cargoEmpleado.value);
+      cargoEmpleado.innerHTML = `<option value="">Seleccione</option>`;
+
+      Object.entries(CARGOS_OFICIALES).forEach(([cargo, config]) => {
+        const option = document.createElement("option");
+        option.value = cargo;
+        option.textContent = cargo;
+        option.dataset.area = config.area;
+        option.dataset.sueldo = String(config.sueldo.toFixed(2));
+        cargoEmpleado.appendChild(option);
+      });
+
+      if (valorAnterior && CARGOS_OFICIALES[valorAnterior]) {
+        cargoEmpleado.value = valorAnterior;
+      }
+    }
+
+    if (areaEmpleado) {
+      const areas = [...new Set(Object.values(CARGOS_OFICIALES).map((item) => item.area))];
+      areaEmpleado.innerHTML = `<option value="">Seleccione cargo primero</option>`;
+
+      areas.forEach((area) => {
+        const option = document.createElement("option");
+        option.value = area;
+        option.textContent = area;
+        areaEmpleado.appendChild(option);
+      });
+
+      areaEmpleado.disabled = true;
+      areaEmpleado.title = "El área se asigna automáticamente según el cargo.";
+    }
+
+    if (sueldoEmpleado) {
+      sueldoEmpleado.readOnly = true;
+      sueldoEmpleado.title = "El sueldo base se asigna automáticamente según el cargo.";
+    }
+  }
+
+  function aplicarCargoAutomatico(opciones = {}) {
+    if (!cargoEmpleado || !areaEmpleado || !sueldoEmpleado) return;
+
+    const cargoNormalizado = normalizarCargo(cargoEmpleado.value);
+    const config = obtenerConfigCargo(cargoNormalizado);
+
+    if (!config) {
+      areaEmpleado.value = "";
+      sueldoEmpleado.value = "";
+      return;
+    }
+
+    cargoEmpleado.value = cargoNormalizado;
+    areaEmpleado.value = config.area;
+
+    if (opciones.preservarSueldo && esNumeroValidoMayorCero(opciones.sueldoActual)) {
+      sueldoEmpleado.value = redondearDos(opciones.sueldoActual).toFixed(2);
+    } else {
+      sueldoEmpleado.value = redondearDos(config.sueldo).toFixed(2);
+    }
+  }
+
+  function calcularValorSancionAsistencia() {
+    if (!sancionAsistencia) return 0;
+
+    const porcentaje = Number(sancionAsistencia.value || 0);
+    const empleado = obtenerEmpleadoPorId(empleadoAsistencia?.value);
+    const sueldo = Number(empleado?.sueldo || 0);
+    const valor = redondearDos((sueldo * porcentaje) / 100);
+
+    if (valorSancionAsistencia) {
+      valorSancionAsistencia.value = valor.toFixed(2);
+    }
+
+    return valor;
+  }
+
+  function obtenerAsistenciasEmpleadoPeriodo(idEmpleado, periodo) {
+    if (!idEmpleado || !periodo) return [];
+
+    return asistenciaCache.filter((registro) => {
+      return (
+        Number(registro.id_empleado) === Number(idEmpleado) &&
+        String(registro.fecha || "").startsWith(periodo)
+      );
+    });
+  }
+
+  function calcularDatosRolPagoVista() {
+    const idEmpleado = Number(empleadoRolPago?.value || 0);
+    const periodo = periodoRolPago?.value || "";
+    const empleado = obtenerEmpleadoPorId(idEmpleado);
+    const sueldoBase = Number(empleado?.sueldo || 0);
+    const asistenciasPeriodo = obtenerAsistenciasEmpleadoPeriodo(idEmpleado, periodo);
+
+    const totalHorasExtras = redondearDos(
+      asistenciasPeriodo.reduce((total, registro) => total + obtenerHorasExtrasRegistro(registro), 0)
+    );
+
+    const totalSanciones = redondearDos(
+      asistenciasPeriodo.reduce((total, registro) => total + obtenerValorSancionRegistro(registro), 0)
+    );
+
+    let valorHoraExtra = Number(valorHoraExtraRolPago?.value || VALOR_HORA_EXTRA_DEFECTO);
+
+    if (!Number.isFinite(valorHoraExtra) || valorHoraExtra <= 0) {
+      valorHoraExtra = VALOR_HORA_EXTRA_DEFECTO;
+    }
+
+    const bonificacionHorasExtras = redondearDos(totalHorasExtras * valorHoraExtra);
+    const bonificacionesAdicionales = redondearDos(Number(bonificacionesRolPago?.value || 0));
+    const aporteIess = redondearDos((sueldoBase * PORCENTAJE_IESS_EMPLEADO) / 100);
+    const otrosDescuentos = redondearDos(Number(descuentosRolPago?.value || 0));
+    const totalIngresos = redondearDos(sueldoBase + bonificacionHorasExtras + bonificacionesAdicionales);
+    const totalDescuentos = redondearDos(totalSanciones + aporteIess + otrosDescuentos);
+    const netoPagar = redondearDos(totalIngresos - totalDescuentos);
+
+    return {
+      empleado,
+      sueldoBase,
+      totalHorasExtras,
+      valorHoraExtra,
+      bonificacionHorasExtras,
+      bonificacionesAdicionales,
+      totalSanciones,
+      aporteIess,
+      otrosDescuentos,
+      totalIngresos,
+      totalDescuentos,
+      netoPagar
+    };
+  }
+
+  function actualizarCalculosRolPago() {
+    const datos = calcularDatosRolPagoVista();
+
+    if (totalHorasExtrasRolPago) {
+      totalHorasExtrasRolPago.value = datos.totalHorasExtras.toFixed(2);
+    }
+
+    if (horasExtrasRolPago) {
+      horasExtrasRolPago.value = datos.bonificacionHorasExtras.toFixed(2);
+    }
+
+    if (valorHoraExtraRolPago) {
+      valorHoraExtraRolPago.value = datos.valorHoraExtra.toFixed(2);
+    }
+
+    if (bonificacionHorasExtrasRolPago) {
+      bonificacionHorasExtrasRolPago.value = datos.bonificacionHorasExtras.toFixed(2);
+    }
+
+    if (sancionesCalculadasRolPago) {
+      sancionesCalculadasRolPago.value = datos.totalSanciones.toFixed(2);
+    }
+
+    if (sancionesRolPago) {
+      sancionesRolPago.value = datos.totalSanciones.toFixed(2);
+    }
+
+    if (aporteIessRolPago) {
+      aporteIessRolPago.value = datos.aporteIess.toFixed(2);
+    }
+
+    if (totalIngresosRolPago) {
+      totalIngresosRolPago.value = datos.totalIngresos.toFixed(2);
+    }
+
+    if (totalDescuentosRolPago) {
+      totalDescuentosRolPago.value = datos.totalDescuentos.toFixed(2);
+    }
+
+    if (netoPagarRolPago) {
+      netoPagarRolPago.value = datos.netoPagar.toFixed(2);
     }
   }
 
@@ -239,6 +536,16 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (idEmpleadoEditar) {
       idEmpleadoEditar.value = "";
+    }
+
+    if (areaEmpleado) {
+      areaEmpleado.value = "";
+      areaEmpleado.disabled = true;
+    }
+
+    if (sueldoEmpleado) {
+      sueldoEmpleado.value = "";
+      sueldoEmpleado.readOnly = true;
     }
 
     if (estadoEmpleado) {
@@ -267,6 +574,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (fechaAsistencia) {
       fechaAsistencia.value = obtenerFechaActualISO();
+      fechaAsistencia.min = FECHA_MINIMA_EMPRESA;
       fechaAsistencia.max = obtenerFechaActualISO();
     }
 
@@ -281,6 +589,10 @@ document.addEventListener("DOMContentLoaded", function () {
     if (sancionAsistencia) {
       sancionAsistencia.value = 0;
     }
+
+    if (valorSancionAsistencia) {
+      valorSancionAsistencia.value = "0.00";
+    }
   }
 
   function limpiarFormularioRolPago() {
@@ -290,14 +602,15 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (periodoRolPago) {
       periodoRolPago.max = obtenerMesActualISO();
+      periodoRolPago.value = obtenerMesActualISO();
     }
 
-    if (horasExtrasRolPago) {
-      horasExtrasRolPago.value = 0;
+    if (valorHoraExtraRolPago) {
+      valorHoraExtraRolPago.value = VALOR_HORA_EXTRA_DEFECTO.toFixed(2);
     }
 
-    if (sancionesRolPago) {
-      sancionesRolPago.value = 0;
+    if (claveAutorizacionHoraExtra) {
+      claveAutorizacionHoraExtra.value = "";
     }
 
     if (bonificacionesRolPago) {
@@ -307,18 +620,36 @@ document.addEventListener("DOMContentLoaded", function () {
     if (descuentosRolPago) {
       descuentosRolPago.value = 0;
     }
+
+    actualizarCalculosRolPago();
+  }
+
+  function limpiarFormularioCambioSueldo() {
+    if (!formCambioSueldo) return;
+
+    formCambioSueldo.reset();
+
+    if (sueldoActualCambio) {
+      sueldoActualCambio.value = "";
+    }
   }
 
   function construirEmpleadoDesdeFormulario() {
+    const cargo = normalizarCargo(cargoEmpleado?.value || "");
+    const configCargo = obtenerConfigCargo(cargo);
+    const idEditar = idEmpleadoEditar?.value || "";
+
     return {
       identificacion: limpiarTexto(cedulaEmpleado?.value),
       nombres: limpiarTexto(nombresEmpleado?.value),
       apellidos: limpiarTexto(apellidosEmpleado?.value),
       telefono: limpiarTexto(telefonoEmpleado?.value),
       direccion: limpiarTexto(direccionEmpleado?.value),
-      cargo: cargoEmpleado?.value || "",
-      area: areaEmpleado?.value || "",
-      sueldo: Number(sueldoEmpleado?.value || 0),
+      cargo,
+      area: configCargo ? configCargo.area : areaEmpleado?.value || "",
+      sueldo: idEditar
+        ? Number(sueldoEmpleado?.value || configCargo?.sueldo || 0)
+        : Number(configCargo?.sueldo || 0),
       fecha_ingreso: fechaIngresoEmpleado?.value || "",
       estado_empleado: estadoEmpleado?.value || ""
     };
@@ -336,6 +667,7 @@ document.addEventListener("DOMContentLoaded", function () {
 
   function validarFormularioEmpleado(empleado) {
     const idEditar = idEmpleadoEditar?.value || "";
+    const configCargo = obtenerConfigCargo(empleado.cargo);
 
     if (
       empleado.identificacion === "" ||
@@ -397,13 +729,33 @@ document.addEventListener("DOMContentLoaded", function () {
       return false;
     }
 
+    if (!configCargo) {
+      alert("Seleccione un cargo válido. El cargo debe pertenecer a la lista oficial de la empresa.");
+      return false;
+    }
+
+    if (empleado.area !== configCargo.area) {
+      alert(`El área no coincide con el cargo. Para ${empleado.cargo}, el área correcta es ${configCargo.area}.`);
+      return false;
+    }
+
     if (!esNumeroValidoMayorCero(empleado.sueldo)) {
       alert("El sueldo base debe ser mayor a cero.");
       return false;
     }
 
+    if (!idEditar && Number(empleado.sueldo) !== Number(configCargo.sueldo)) {
+      alert("El sueldo base de un empleado nuevo debe ser el sueldo fijo del cargo seleccionado.");
+      return false;
+    }
+
     if (empleado.sueldo > 10000) {
       alert("Revise el sueldo ingresado. El valor parece demasiado alto para este módulo.");
+      return false;
+    }
+
+    if (empleado.fecha_ingreso < FECHA_MINIMA_EMPRESA) {
+      alert(`No se permite registrar una fecha de ingreso anterior a ${FECHA_MINIMA_EMPRESA}.`);
       return false;
     }
 
@@ -419,10 +771,6 @@ document.addEventListener("DOMContentLoaded", function () {
 
     return true;
   }
-
-  // ============================================================
-  // VALIDACIONES DE ESCRITURA EN TIEMPO REAL
-  // ============================================================
 
   if (cedulaEmpleado) {
     cedulaEmpleado.addEventListener("input", function () {
@@ -450,19 +798,58 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   }
 
-  if (sueldoEmpleado) {
-    sueldoEmpleado.addEventListener("input", function () {
-      if (Number(this.value) < 0) {
-        this.value = 0;
+  if (cargoEmpleado) {
+    cargoEmpleado.addEventListener("change", function () {
+      aplicarCargoAutomatico({ preservarSueldo: false });
+    });
+  }
+
+  if (fechaIngresoEmpleado) {
+    fechaIngresoEmpleado.addEventListener("change", function () {
+      if (this.value && this.value < FECHA_MINIMA_EMPRESA) {
+        alert(`La fecha de ingreso no puede ser menor a ${FECHA_MINIMA_EMPRESA}.`);
+        this.value = FECHA_MINIMA_EMPRESA;
+      }
+
+      if (this.value && this.value > obtenerFechaActualISO()) {
+        alert("La fecha de ingreso no puede ser futura.");
+        this.value = obtenerFechaActualISO();
       }
     });
   }
 
+  if (fechaAsistencia) {
+    fechaAsistencia.addEventListener("change", function () {
+      if (this.value && this.value < FECHA_MINIMA_EMPRESA) {
+        alert(`La fecha de asistencia no puede ser menor a ${FECHA_MINIMA_EMPRESA}.`);
+        this.value = FECHA_MINIMA_EMPRESA;
+      }
+
+      if (this.value && this.value > obtenerFechaActualISO()) {
+        alert("La fecha de asistencia no puede ser futura.");
+        this.value = obtenerFechaActualISO();
+      }
+    });
+  }
+
+  if (empleadoAsistencia) {
+    empleadoAsistencia.addEventListener("change", calcularValorSancionAsistencia);
+  }
+
   if (sancionAsistencia) {
     sancionAsistencia.addEventListener("input", function () {
-      if (Number(this.value) < 0) {
-        this.value = 0;
+      let valor = Number(this.value || 0);
+
+      if (!Number.isFinite(valor) || valor < 0) {
+        valor = 0;
       }
+
+      if (valor > 100) {
+        valor = 100;
+      }
+
+      this.value = valor;
+      calcularValorSancionAsistencia();
     });
   }
 
@@ -471,6 +858,8 @@ document.addEventListener("DOMContentLoaded", function () {
       if (Number(this.value) < 0) {
         this.value = 0;
       }
+
+      actualizarCalculosRolPago();
     });
   }
 
@@ -479,12 +868,40 @@ document.addEventListener("DOMContentLoaded", function () {
       if (Number(this.value) < 0) {
         this.value = 0;
       }
+
+      actualizarCalculosRolPago();
     });
   }
 
-  // ============================================================
-  // RESUMEN
-  // ============================================================
+  if (valorHoraExtraRolPago) {
+    valorHoraExtraRolPago.addEventListener("input", function () {
+      let valor = Number(this.value || 0);
+
+      if (!Number.isFinite(valor) || valor < 0) {
+        valor = VALOR_HORA_EXTRA_DEFECTO;
+      }
+
+      this.value = valor;
+      actualizarCalculosRolPago();
+    });
+  }
+
+  if (empleadoRolPago) {
+    empleadoRolPago.addEventListener("change", actualizarCalculosRolPago);
+  }
+
+  if (periodoRolPago) {
+    periodoRolPago.addEventListener("change", actualizarCalculosRolPago);
+  }
+
+  if (empleadoCambioSueldo) {
+    empleadoCambioSueldo.addEventListener("change", function () {
+      const empleado = obtenerEmpleadoPorId(this.value);
+      if (sueldoActualCambio) {
+        sueldoActualCambio.value = empleado ? Number(empleado.sueldo || 0).toFixed(2) : "";
+      }
+    });
+  }
 
   async function cargarResumenEmpleados() {
     if (!totalEmpleados) return;
@@ -503,10 +920,6 @@ document.addEventListener("DOMContentLoaded", function () {
       console.error("Error al cargar resumen de empleados:", error);
     }
   }
-
-  // ============================================================
-  // EMPLEADOS
-  // ============================================================
 
   async function cargarEmpleados() {
     if (!tablaEmpleados) return;
@@ -527,6 +940,7 @@ document.addEventListener("DOMContentLoaded", function () {
         `;
 
         cargarSelectEmpleadosActivos([]);
+        actualizarCalculosRolPago();
         return;
       }
 
@@ -539,30 +953,20 @@ document.addEventListener("DOMContentLoaded", function () {
         fila.innerHTML = `
           <td>${escaparHTML(empleado.id_empleado)}</td>
           <td>${escaparHTML(empleado.identificacion)}</td>
-          <td>${escaparHTML(`${empleado.nombres || ""} ${empleado.apellidos || ""}`)}</td>
+          <td>${escaparHTML(obtenerNombreEmpleado(empleado))}</td>
           <td>${escaparHTML(empleado.telefono || "-")}</td>
-          <td>${escaparHTML(empleado.cargo || "-")}</td>
-          <td>${escaparHTML(empleado.area || "-")}</td>
+          <td>${escaparHTML(normalizarCargo(empleado.cargo || "-"))}</td>
+          <td>${escaparHTML(empleado.area || obtenerConfigCargo(empleado.cargo)?.area || "-")}</td>
           <td>${formatearDinero(empleado.sueldo)}</td>
           <td>${escaparHTML(empleado.fecha_ingreso || "-")}</td>
           <td><span class="badge ${claseEstado}">${escaparHTML(estado)}</span></td>
           <td>
             <div class="btn-group btn-group-sm" role="group">
-              <button class="btn btn-primary" onclick="editarEmpleado(${Number(empleado.id_empleado)})">
-                Editar
-              </button>
-              <button class="btn btn-warning" onclick="suspenderEmpleado(${Number(empleado.id_empleado)})">
-                Suspender
-              </button>
-              <button class="btn btn-secondary" onclick="desactivarEmpleado(${Number(empleado.id_empleado)})">
-                Inactivar
-              </button>
-              <button class="btn btn-success" onclick="activarEmpleado(${Number(empleado.id_empleado)})">
-                Activar
-              </button>
-              <button class="btn btn-danger" onclick="eliminarEmpleado(${Number(empleado.id_empleado)})">
-                Eliminar
-              </button>
+              <button class="btn btn-primary" onclick="editarEmpleado(${Number(empleado.id_empleado)})">Editar</button>
+              <button class="btn btn-warning" onclick="suspenderEmpleado(${Number(empleado.id_empleado)})">Suspender</button>
+              <button class="btn btn-secondary" onclick="desactivarEmpleado(${Number(empleado.id_empleado)})">Inactivar</button>
+              <button class="btn btn-success" onclick="activarEmpleado(${Number(empleado.id_empleado)})">Activar</button>
+              <button class="btn btn-danger" onclick="eliminarEmpleado(${Number(empleado.id_empleado)})">Eliminar</button>
             </div>
           </td>
         `;
@@ -571,6 +975,7 @@ document.addEventListener("DOMContentLoaded", function () {
       });
 
       cargarSelectEmpleadosActivos(empleadosCache);
+      actualizarCalculosRolPago();
     } catch (error) {
       tablaEmpleados.innerHTML = `
         <tr>
@@ -583,36 +988,27 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function cargarSelectEmpleadosActivos(empleados) {
-    if (empleadoRolPago) {
-      empleadoRolPago.innerHTML = `
-        <option value="">Seleccione empleado activo</option>
-      `;
-    }
+    const selects = [empleadoRolPago, empleadoAsistencia, empleadoCambioSueldo].filter(Boolean);
 
-    if (empleadoAsistencia) {
-      empleadoAsistencia.innerHTML = `
-        <option value="">Seleccione empleado activo</option>
-      `;
-    }
+    selects.forEach((select) => {
+      const textoBase = select === empleadoCambioSueldo ? "Seleccione empleado" : "Seleccione empleado activo";
+      select.innerHTML = `<option value="">${textoBase}</option>`;
+    });
 
     empleados
       .filter((empleado) => empleado.estado_empleado === "Activo")
       .forEach((empleado) => {
-        const textoEmpleado = `${empleado.nombres || ""} ${empleado.apellidos || ""} - ${empleado.cargo || ""}`;
+        const textoEmpleado = `${obtenerNombreEmpleado(empleado)} - ${normalizarCargo(empleado.cargo || "")}`;
 
-        if (empleadoRolPago) {
-          const optionRol = document.createElement("option");
-          optionRol.value = empleado.id_empleado;
-          optionRol.textContent = textoEmpleado;
-          empleadoRolPago.appendChild(optionRol);
-        }
-
-        if (empleadoAsistencia) {
-          const optionAsistencia = document.createElement("option");
-          optionAsistencia.value = empleado.id_empleado;
-          optionAsistencia.textContent = textoEmpleado;
-          empleadoAsistencia.appendChild(optionAsistencia);
-        }
+        selects.forEach((select) => {
+          const option = document.createElement("option");
+          option.value = empleado.id_empleado;
+          option.textContent = textoEmpleado;
+          option.dataset.sueldo = Number(empleado.sueldo || 0).toFixed(2);
+          option.dataset.cargo = normalizarCargo(empleado.cargo || "");
+          option.dataset.area = empleado.area || obtenerConfigCargo(empleado.cargo)?.area || "";
+          select.appendChild(option);
+        });
       });
   }
 
@@ -650,9 +1046,21 @@ document.addEventListener("DOMContentLoaded", function () {
     btnCancelarEdicionEmpleado.addEventListener("click", limpiarFormularioEmpleado);
   }
 
+  if (btnLimpiarEmpleado) {
+    btnLimpiarEmpleado.addEventListener("click", function () {
+      setTimeout(limpiarFormularioEmpleado, 0);
+    });
+  }
+
   window.editarEmpleado = async function (idEmpleado) {
     try {
       const empleado = await window.apiGet(`${API_TALENTO}/empleados/${idEmpleado}`);
+      const cargoNormalizado = normalizarCargo(empleado.cargo || "");
+      const config = obtenerConfigCargo(cargoNormalizado);
+
+      if (!config) {
+        alert("El empleado tiene un cargo antiguo o no válido. Seleccione un cargo oficial antes de actualizar.");
+      }
 
       idEmpleadoEditar.value = empleado.id_empleado;
       cedulaEmpleado.value = empleado.identificacion || "";
@@ -660,9 +1068,9 @@ document.addEventListener("DOMContentLoaded", function () {
       apellidosEmpleado.value = empleado.apellidos || "";
       telefonoEmpleado.value = empleado.telefono || "";
       direccionEmpleado.value = empleado.direccion || "";
-      cargoEmpleado.value = empleado.cargo || "";
-      areaEmpleado.value = empleado.area || "";
-      sueldoEmpleado.value = empleado.sueldo || "";
+      cargoEmpleado.value = config ? cargoNormalizado : "";
+      areaEmpleado.value = config ? config.area : "";
+      sueldoEmpleado.value = Number(empleado.sueldo || config?.sueldo || 0).toFixed(2);
       fechaIngresoEmpleado.value = empleado.fecha_ingreso || "";
       estadoEmpleado.value = empleado.estado_empleado || "Activo";
 
@@ -740,17 +1148,90 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   };
 
-  // ============================================================
-  // ASISTENCIA MANUAL
-  // ============================================================
+  if (formCambioSueldo) {
+    formCambioSueldo.addEventListener("submit", async function (event) {
+      event.preventDefault();
+
+      const idEmpleado = Number(empleadoCambioSueldo?.value || 0);
+      const empleado = obtenerEmpleadoPorId(idEmpleado);
+      const sueldoActual = Number(empleado?.sueldo || 0);
+      const nuevoSueldo = Number(nuevoSueldoCambio?.value || 0);
+      const motivo = limpiarTexto(motivoCambioSueldo?.value);
+      const claveAutorizacion = limpiarTexto(claveAutorizacionSueldo?.value);
+
+      if (!idEmpleado || !empleado) {
+        alert("Seleccione el empleado al que desea modificar el sueldo.");
+        return;
+      }
+
+      if (!esNumeroValidoMayorCero(nuevoSueldo)) {
+        alert("El nuevo sueldo debe ser mayor a cero.");
+        return;
+      }
+
+      if (nuevoSueldo > 10000) {
+        alert("Revise el nuevo sueldo. El valor parece demasiado alto para este módulo.");
+        return;
+      }
+
+      if (nuevoSueldo === sueldoActual) {
+        alert("El nuevo sueldo no puede ser igual al sueldo actual.");
+        return;
+      }
+
+      if (motivo.length < 5) {
+        alert("Ingrese un motivo válido para el cambio de sueldo.");
+        return;
+      }
+
+      if (claveAutorizacion.length < 4) {
+        alert("Ingrese la clave de autorización del administrador o gerente.");
+        return;
+      }
+
+      const confirmar = confirm(
+        `¿Confirma modificar el sueldo de ${obtenerNombreEmpleado(empleado)} de ${formatearDinero(sueldoActual)} a ${formatearDinero(nuevoSueldo)}?`
+      );
+
+      if (!confirmar) return;
+
+      const datosCambio = {
+        id_empleado: idEmpleado,
+        sueldo_anterior: sueldoActual,
+        nuevo_sueldo: redondearDos(nuevoSueldo),
+        motivo,
+        clave_autorizacion: claveAutorizacion,
+        usuario_autorizacion: obtenerUsuarioSesion()
+      };
+
+      try {
+        await window.apiPatch(`${API_TALENTO}/empleados/${idEmpleado}/cambiar-sueldo`, datosCambio);
+        alert("Sueldo modificado correctamente con autorización.");
+        limpiarFormularioCambioSueldo();
+        await cargarEmpleados();
+        await cargarResumenEmpleados();
+      } catch (error) {
+        mostrarMensajeError(
+          error,
+          "No se pudo modificar el sueldo. Recuerde que el backend también debe tener el endpoint /cambiar-sueldo con validación de clave."
+        );
+      }
+    });
+  }
 
   function construirDatosEntrada() {
+    const porcentajeSancion = Number(sancionAsistencia?.value || 0);
+    const valorSancion = calcularValorSancionAsistencia();
+
     return {
       id_empleado: Number(empleadoAsistencia?.value || 0),
       fecha: fechaAsistencia?.value || "",
       hora_entrada: horaEntradaAsistencia?.value || "",
       hora_programada_entrada: horaProgramadaEntrada?.value || "",
-      sancion: Number(sancionAsistencia?.value || 0),
+      sancion: valorSancion,
+      valor_sancion: valorSancion,
+      sancion_porcentaje: porcentajeSancion,
+      porcentaje_sancion: porcentajeSancion,
       observacion: limpiarTexto(observacionAsistencia?.value) || null
     };
   }
@@ -763,6 +1244,11 @@ document.addEventListener("DOMContentLoaded", function () {
 
     if (!datosEntrada.fecha) {
       alert("Seleccione la fecha de asistencia.");
+      return false;
+    }
+
+    if (datosEntrada.fecha < FECHA_MINIMA_EMPRESA) {
+      alert(`No se permite registrar asistencia anterior a ${FECHA_MINIMA_EMPRESA}.`);
       return false;
     }
 
@@ -781,8 +1267,18 @@ document.addEventListener("DOMContentLoaded", function () {
       return false;
     }
 
-    if (!esNumeroValidoNoNegativo(datosEntrada.sancion)) {
-      alert("La sanción debe ser un valor numérico positivo o cero.");
+    if (!esNumeroValidoNoNegativo(datosEntrada.sancion_porcentaje)) {
+      alert("La sanción debe ser un porcentaje positivo o cero.");
+      return false;
+    }
+
+    if (datosEntrada.sancion_porcentaje > 100) {
+      alert("La sanción no puede ser mayor al 100%.");
+      return false;
+    }
+
+    if (datosEntrada.sancion_porcentaje > 0 && !datosEntrada.observacion) {
+      alert("Cuando aplica una sanción debe escribir la observación o motivo de la sanción.");
       return false;
     }
 
@@ -846,11 +1342,12 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!asistenciaCache || asistenciaCache.length === 0) {
         tablaAsistencia.innerHTML = `
           <tr>
-            <td colspan="13" class="text-center text-muted">
+            <td colspan="14" class="text-center text-muted">
               No existe asistencia registrada.
             </td>
           </tr>
         `;
+        actualizarCalculosRolPago();
         return;
       }
 
@@ -859,6 +1356,8 @@ document.addEventListener("DOMContentLoaded", function () {
 
         const estado = registro.estado_asistencia || "-";
         const claseEstado = obtenerClaseAsistencia(estado);
+        const porcentajeSancion = obtenerPorcentajeSancionRegistro(registro);
+        const valorSancion = obtenerValorSancionRegistro(registro);
 
         let botonSalida = `
           <button class="btn btn-success btn-sm" onclick="marcarSalida(${Number(registro.id_asistencia)})">
@@ -880,18 +1379,21 @@ document.addEventListener("DOMContentLoaded", function () {
           <td>${escaparHTML(registro.hora_salida || "-")}</td>
           <td><span class="badge ${claseEstado}">${escaparHTML(estado)}</span></td>
           <td>${escaparHTML(registro.minutos_atraso || 0)} min</td>
-          <td>${formatearDinero(registro.sancion)}</td>
+          <td>${formatearNumero(porcentajeSancion)}%</td>
+          <td>${formatearDinero(valorSancion)}</td>
           <td>${formatearNumero(registro.horas_trabajadas)} h</td>
-          <td>${formatearNumero(registro.horas_extras)} h</td>
+          <td>${formatearNumero(obtenerHorasExtrasRegistro(registro))} h</td>
           <td>${botonSalida}</td>
         `;
 
         tablaAsistencia.appendChild(fila);
       });
+
+      actualizarCalculosRolPago();
     } catch (error) {
       tablaAsistencia.innerHTML = `
         <tr>
-          <td colspan="13" class="text-center text-danger">
+          <td colspan="14" class="text-center text-danger">
             Error al cargar asistencia: ${escaparHTML(error.message)}
           </td>
         </tr>
@@ -975,10 +1477,6 @@ document.addEventListener("DOMContentLoaded", function () {
     }
   };
 
-  // ============================================================
-  // ROLES DE PAGO
-  // ============================================================
-
   async function cargarRolesPago() {
     if (!tablaRolesPago) return;
 
@@ -990,7 +1488,7 @@ document.addEventListener("DOMContentLoaded", function () {
       if (!roles || roles.length === 0) {
         tablaRolesPago.innerHTML = `
           <tr>
-            <td colspan="11" class="text-center text-muted">
+            <td colspan="16" class="text-center text-muted">
               No existen roles de pago archivados.
             </td>
           </tr>
@@ -1001,6 +1499,29 @@ document.addEventListener("DOMContentLoaded", function () {
       roles.forEach((rol, index) => {
         const idRol = rol.id_rol_pago || rol.id || rol.id_rol || index + 1;
         const empleado = rol.empleado || rol.nombres || rol.nombre_empleado || "-";
+        const sueldoBase = Number(rol.sueldo_base || 0);
+        const valorHoraExtra = Number(rol.valor_hora_extra || VALOR_HORA_EXTRA_DEFECTO);
+        const totalHorasExtras = Number(rol.total_horas_extras || rol.horas_extras_cantidad || 0);
+        const bonificacionHorasExtras = Number(
+          rol.bonificacion_horas_extras ??
+          rol.bonificacion_horas_extra ??
+          rol.bonificacion_he ??
+          rol.horas_extras ??
+          0
+        );
+        const bonificaciones = Number(rol.bonificaciones || 0);
+        const sanciones = Number(rol.sanciones || 0);
+        const aporteIess = Number(rol.aporte_iess ?? rol.descuento_iess ?? rol.iess ?? 0);
+        const otrosDescuentos = Number(rol.otros_descuentos ?? rol.descuentos ?? 0);
+        const totalIngresos = Number(
+          rol.total_ingresos ??
+          sueldoBase + bonificacionHorasExtras + bonificaciones
+        );
+        const totalDescuentos = Number(
+          rol.total_descuentos ??
+          sanciones + aporteIess + otrosDescuentos
+        );
+        const netoPagar = Number(rol.neto_pagar ?? rol.total_pagar ?? totalIngresos - totalDescuentos);
 
         const fila = document.createElement("tr");
         const rolSeguro = encodeURIComponent(JSON.stringify(rol));
@@ -1009,12 +1530,17 @@ document.addEventListener("DOMContentLoaded", function () {
           <td>${escaparHTML(idRol)}</td>
           <td>${escaparHTML(empleado)}</td>
           <td>${escaparHTML(rol.periodo || "-")}</td>
-          <td>${formatearDinero(rol.sueldo_base)}</td>
-          <td>${formatearDinero(rol.horas_extras)}</td>
-          <td>${formatearDinero(rol.bonificaciones)}</td>
-          <td>${formatearDinero(rol.sanciones)}</td>
-          <td>${formatearDinero(rol.descuentos)}</td>
-          <td><strong>${formatearDinero(rol.total_pagar)}</strong></td>
+          <td>${formatearDinero(sueldoBase)}</td>
+          <td>${totalHorasExtras ? `${formatearNumero(totalHorasExtras)} h` : "-"}</td>
+          <td>${formatearDinero(valorHoraExtra)}</td>
+          <td>${formatearDinero(bonificacionHorasExtras)}</td>
+          <td>${formatearDinero(bonificaciones)}</td>
+          <td>${formatearDinero(sanciones)}</td>
+          <td>${formatearDinero(aporteIess)}</td>
+          <td>${formatearDinero(otrosDescuentos)}</td>
+          <td>${formatearDinero(totalIngresos)}</td>
+          <td>${formatearDinero(totalDescuentos)}</td>
+          <td><strong>${formatearDinero(netoPagar)}</strong></td>
           <td>${escaparHTML(rol.fecha_generacion || "-")}</td>
           <td>
             <button class="btn btn-outline-success btn-sm" onclick="generarComprobanteRolDesdeTexto('${rolSeguro}')">
@@ -1028,7 +1554,7 @@ document.addEventListener("DOMContentLoaded", function () {
     } catch (error) {
       tablaRolesPago.innerHTML = `
         <tr>
-          <td colspan="11" class="text-center text-danger">
+          <td colspan="16" class="text-center text-danger">
             Error al cargar roles de pago: ${escaparHTML(error.message)}
           </td>
         </tr>
@@ -1037,13 +1563,31 @@ document.addEventListener("DOMContentLoaded", function () {
   }
 
   function construirRolPagoDesdeFormulario() {
+    const datos = calcularDatosRolPagoVista();
+    const cambioValorHoraExtra = Number(datos.valorHoraExtra) !== Number(VALOR_HORA_EXTRA_DEFECTO);
+
     return {
       id_empleado: Number(empleadoRolPago?.value || 0),
       periodo: periodoRolPago?.value || "",
-      horas_extras: Number(horasExtrasRolPago?.value || 0),
-      bonificaciones: Number(bonificacionesRolPago?.value || 0),
-      sanciones: Number(sancionesRolPago?.value || 0),
-      descuentos: Number(descuentosRolPago?.value || 0),
+      sueldo_base: datos.sueldoBase,
+      total_horas_extras: datos.totalHorasExtras,
+      valor_hora_extra: datos.valorHoraExtra,
+      bonificacion_horas_extras: datos.bonificacionHorasExtras,
+      horas_extras: datos.bonificacionHorasExtras,
+      bonificaciones: datos.bonificacionesAdicionales,
+      sanciones: datos.totalSanciones,
+      aporte_iess: datos.aporteIess,
+      descuento_iess: datos.aporteIess,
+      porcentaje_iess: PORCENTAJE_IESS_EMPLEADO,
+      descuentos: datos.otrosDescuentos,
+      otros_descuentos: datos.otrosDescuentos,
+      total_ingresos: datos.totalIngresos,
+      total_descuentos: datos.totalDescuentos,
+      neto_pagar: datos.netoPagar,
+      total_pagar: datos.netoPagar,
+      valor_hora_extra_modificado: cambioValorHoraExtra,
+      clave_autorizacion_hora_extra: limpiarTexto(claveAutorizacionHoraExtra?.value) || null,
+      usuario_autorizacion_hora_extra: cambioValorHoraExtra ? obtenerUsuarioSesion() : null,
       observacion: limpiarTexto(observacionRolPago?.value) || "Rol generado automáticamente desde Talento Humano"
     };
   }
@@ -1065,12 +1609,25 @@ document.addEventListener("DOMContentLoaded", function () {
     }
 
     if (
-      !esNumeroValidoNoNegativo(rolPago.horas_extras) ||
+      !esNumeroValidoNoNegativo(rolPago.total_horas_extras) ||
+      !esNumeroValidoMayorCero(rolPago.valor_hora_extra) ||
+      !esNumeroValidoNoNegativo(rolPago.bonificacion_horas_extras) ||
       !esNumeroValidoNoNegativo(rolPago.bonificaciones) ||
       !esNumeroValidoNoNegativo(rolPago.sanciones) ||
+      !esNumeroValidoNoNegativo(rolPago.aporte_iess) ||
       !esNumeroValidoNoNegativo(rolPago.descuentos)
     ) {
-      alert("No se permiten valores negativos en el rol de pago.");
+      alert("No se permiten valores negativos ni inválidos en el rol de pago.");
+      return false;
+    }
+
+    if (rolPago.valor_hora_extra_modificado && !rolPago.clave_autorizacion_hora_extra) {
+      alert("Para modificar el valor de la hora extra debe ingresar clave de autorización.");
+      return false;
+    }
+
+    if (rolPago.valor_hora_extra_modificado && String(rolPago.clave_autorizacion_hora_extra).length < 4) {
+      alert("La clave de autorización para modificar la hora extra debe tener al menos 4 caracteres.");
       return false;
     }
 
@@ -1083,6 +1640,11 @@ document.addEventListener("DOMContentLoaded", function () {
       return false;
     }
 
+    if (rolPago.neto_pagar < 0) {
+      alert("El neto a pagar no puede quedar en negativo. Revise sanciones y descuentos.");
+      return false;
+    }
+
     return true;
   }
 
@@ -1090,6 +1652,7 @@ document.addEventListener("DOMContentLoaded", function () {
     formRolPago.addEventListener("submit", async function (event) {
       event.preventDefault();
 
+      actualizarCalculosRolPago();
       const rolPago = construirRolPagoDesdeFormulario();
 
       if (!validarRolPago(rolPago)) {
@@ -1126,14 +1689,22 @@ document.addEventListener("DOMContentLoaded", function () {
     const fechaGeneracion = escaparHTML(rol.fecha_generacion || "-");
 
     const sueldoBase = Number(rol.sueldo_base || 0);
-    const horasExtras = Number(rol.horas_extras || 0);
+    const totalHorasExtras = Number(rol.total_horas_extras || rol.horas_extras_cantidad || 0);
+    const valorHoraExtra = Number(rol.valor_hora_extra || VALOR_HORA_EXTRA_DEFECTO);
+    const bonificacionHorasExtras = Number(
+      rol.bonificacion_horas_extras ??
+      rol.bonificacion_horas_extra ??
+      rol.bonificacion_he ??
+      rol.horas_extras ??
+      0
+    );
     const bonificaciones = Number(rol.bonificaciones || 0);
     const sanciones = Number(rol.sanciones || 0);
-    const descuentos = Number(rol.descuentos || 0);
-    const totalPagar = Number(rol.total_pagar || 0);
-
-    const totalIngresos = sueldoBase + horasExtras + bonificaciones;
-    const totalEgresos = sanciones + descuentos;
+    const aporteIess = Number(rol.aporte_iess ?? rol.descuento_iess ?? rol.iess ?? 0);
+    const descuentos = Number(rol.otros_descuentos ?? rol.descuentos ?? 0);
+    const totalIngresos = Number(rol.total_ingresos ?? sueldoBase + bonificacionHorasExtras + bonificaciones);
+    const totalEgresos = Number(rol.total_descuentos ?? sanciones + aporteIess + descuentos);
+    const totalPagar = Number(rol.neto_pagar ?? rol.total_pagar ?? totalIngresos - totalEgresos);
 
     const contenido = `
       <!doctype html>
@@ -1386,11 +1957,11 @@ document.addEventListener("DOMContentLoaded", function () {
                     <td class="valor">${formatearDinero(sueldoBase)}</td>
                   </tr>
                   <tr>
-                    <td>Horas extras</td>
-                    <td class="valor">${formatearDinero(horasExtras)}</td>
+                    <td>Horas extras (${formatearNumero(totalHorasExtras)} h x ${formatearDinero(valorHoraExtra)})</td>
+                    <td class="valor">${formatearDinero(bonificacionHorasExtras)}</td>
                   </tr>
                   <tr>
-                    <td>Bonificaciones</td>
+                    <td>Bonificaciones adicionales</td>
                     <td class="valor">${formatearDinero(bonificaciones)}</td>
                   </tr>
                   <tr>
@@ -1412,11 +1983,15 @@ document.addEventListener("DOMContentLoaded", function () {
                 </thead>
                 <tbody>
                   <tr>
-                    <td>Sanciones</td>
+                    <td>Sanciones registradas</td>
                     <td class="valor">${formatearDinero(sanciones)}</td>
                   </tr>
                   <tr>
-                    <td>Descuentos</td>
+                    <td>Aporte IESS empleado ${formatearNumero(PORCENTAJE_IESS_EMPLEADO)}%</td>
+                    <td class="valor">${formatearDinero(aporteIess)}</td>
+                  </tr>
+                  <tr>
+                    <td>Otros descuentos</td>
                     <td class="valor">${formatearDinero(descuentos)}</td>
                   </tr>
                   <tr>
@@ -1445,8 +2020,8 @@ document.addEventListener("DOMContentLoaded", function () {
             <div class="observacion">
               <strong>Observación:</strong>
               Este comprobante corresponde al rol de pago generado para el periodo indicado.
-              Los valores de sueldo base, horas extras, bonificaciones, sanciones y descuentos
-              fueron calculados con base en la información registrada en el módulo de Talento Humano.
+              Los valores fueron calculados con base en sueldo, asistencia, horas extras,
+              sanciones, bonificaciones, aporte IESS y descuentos registrados en Talento Humano.
             </div>
 
             <div class="firmas">
@@ -1488,14 +2063,12 @@ document.addEventListener("DOMContentLoaded", function () {
     ventana.focus();
   };
 
-  // ============================================================
-  // CARGA INICIAL
-  // ============================================================
-
   configurarLimitesFechas();
+  prepararFormularioCargoAreaSueldo();
   limpiarFormularioEmpleado();
   limpiarFormularioAsistencia();
   limpiarFormularioRolPago();
+  limpiarFormularioCambioSueldo();
 
   cargarResumenEmpleados();
   cargarEmpleados();
