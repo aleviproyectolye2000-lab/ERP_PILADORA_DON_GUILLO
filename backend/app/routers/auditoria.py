@@ -23,6 +23,7 @@ class AccesoCreate(BaseModel):
     fecha_ingreso: Optional[date] = None
     hora_ingreso: Optional[time] = None
     ip_equipo: Optional[str] = None
+    navegador: Optional[str] = None
     estado_sesion: str = "Activa"
 
 
@@ -45,6 +46,8 @@ class AccionCreate(BaseModel):
     descripcion: str
     tabla_afectada: Optional[str] = None
     id_registro_afectado: Optional[int] = None
+    ip_equipo: Optional[str] = None
+    navegador: Optional[str] = None
 
 
 class CerrarSesionesAntiguasCreate(BaseModel):
@@ -57,7 +60,160 @@ class ArchivarAuditoriaCreate(BaseModel):
 
 
 # =====================================================
-# FUNCIONES INTERNAS
+# FUNCIONES INTERNAS DE ESTRUCTURA
+# =====================================================
+
+def tabla_existe(db: Session, nombre_tabla: str) -> bool:
+    resultado = db.execute(
+        text("""
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name = :nombre_tabla
+            ) AS existe;
+        """),
+        {"nombre_tabla": nombre_tabla}
+    ).mappings().first()
+
+    return bool(resultado["existe"])
+
+
+def columna_existe(db: Session, nombre_tabla: str, nombre_columna: str) -> bool:
+    resultado = db.execute(
+        text("""
+            SELECT EXISTS (
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = :nombre_tabla
+                  AND column_name = :nombre_columna
+            ) AS existe;
+        """),
+        {
+            "nombre_tabla": nombre_tabla,
+            "nombre_columna": nombre_columna
+        }
+    ).mappings().first()
+
+    return bool(resultado["existe"])
+
+
+def crear_tablas_historicas_si_no_existen(db: Session):
+    """
+    Crea tablas históricas si no existen.
+    No borra información.
+    Sirve para archivar accesos y acciones antiguas.
+    """
+    db.execute(
+        text("""
+            CREATE TABLE IF NOT EXISTS auditoria_accesos_historico
+            (LIKE auditoria_accesos INCLUDING ALL);
+        """)
+    )
+
+    db.execute(
+        text("""
+            CREATE TABLE IF NOT EXISTS auditoria_acciones_historico
+            (LIKE auditoria_acciones INCLUDING ALL);
+        """)
+    )
+
+
+def asegurar_estructura_auditoria(db: Session):
+    """
+    Asegura columnas necesarias para auditoría en producción.
+    No elimina datos.
+    Solo agrega columnas si faltan.
+    """
+    try:
+        if tabla_existe(db, "auditoria_accesos"):
+            db.execute(text("""
+                ALTER TABLE auditoria_accesos
+                ADD COLUMN IF NOT EXISTS navegador VARCHAR(300);
+            """))
+
+            db.execute(text("""
+                ALTER TABLE auditoria_accesos
+                ADD COLUMN IF NOT EXISTS fecha_creacion TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW();
+            """))
+
+            db.execute(text("""
+                UPDATE auditoria_accesos
+                SET estado_sesion = 'Activa'
+                WHERE LOWER(COALESCE(estado_sesion, '')) IN ('abierta', 'activo');
+            """))
+
+            db.execute(text("""
+                UPDATE auditoria_accesos
+                SET estado_sesion = 'Cerrada'
+                WHERE LOWER(COALESCE(estado_sesion, '')) = 'cerrado';
+            """))
+
+        if tabla_existe(db, "auditoria_acciones"):
+            db.execute(text("""
+                ALTER TABLE auditoria_acciones
+                ADD COLUMN IF NOT EXISTS ip_equipo VARCHAR(100);
+            """))
+
+            db.execute(text("""
+                ALTER TABLE auditoria_acciones
+                ADD COLUMN IF NOT EXISTS navegador VARCHAR(300);
+            """))
+
+            db.execute(text("""
+                ALTER TABLE auditoria_acciones
+                ADD COLUMN IF NOT EXISTS fecha_creacion TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW();
+            """))
+
+            db.execute(text("""
+                UPDATE auditoria_acciones
+                SET accion = 'INGRESO_MODULO'
+                WHERE UPPER(COALESCE(accion, '')) = 'ACCESO_MODULO';
+            """))
+
+        if tabla_existe(db, "auditoria_accesos") and tabla_existe(db, "auditoria_acciones"):
+            crear_tablas_historicas_si_no_existen(db)
+
+            if tabla_existe(db, "auditoria_accesos_historico"):
+                db.execute(text("""
+                    ALTER TABLE auditoria_accesos_historico
+                    ADD COLUMN IF NOT EXISTS navegador VARCHAR(300);
+                """))
+
+                db.execute(text("""
+                    ALTER TABLE auditoria_accesos_historico
+                    ADD COLUMN IF NOT EXISTS fecha_creacion TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW();
+                """))
+
+            if tabla_existe(db, "auditoria_acciones_historico"):
+                db.execute(text("""
+                    ALTER TABLE auditoria_acciones_historico
+                    ADD COLUMN IF NOT EXISTS ip_equipo VARCHAR(100);
+                """))
+
+                db.execute(text("""
+                    ALTER TABLE auditoria_acciones_historico
+                    ADD COLUMN IF NOT EXISTS navegador VARCHAR(300);
+                """))
+
+                db.execute(text("""
+                    ALTER TABLE auditoria_acciones_historico
+                    ADD COLUMN IF NOT EXISTS fecha_creacion TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW();
+                """))
+
+        db.commit()
+
+    except Exception as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"No se pudo preparar la estructura de auditoría. Detalle: {str(error)}"
+        )
+
+
+# =====================================================
+# FUNCIONES INTERNAS GENERALES
 # =====================================================
 
 def normalizar_estado_sesion(estado: str) -> str:
@@ -75,11 +231,33 @@ def normalizar_estado_sesion(estado: str) -> str:
     return "Activa"
 
 
+def normalizar_accion_auditoria(accion: str) -> str:
+    accion_limpia = str(accion or "").strip().upper().replace(" ", "_")
+
+    equivalencias = {
+        "ACCESO_MODULO": "INGRESO_MODULO",
+        "ENTRAR_MODULO": "INGRESO_MODULO",
+        "INGRESAR_MODULO": "INGRESO_MODULO",
+        "CREADO": "CREAR",
+        "REGISTRAR": "CREAR",
+        "REGISTRADO": "CREAR",
+        "INSERT": "CREAR",
+        "INSERTAR": "CREAR",
+        "UPDATE": "EDITAR",
+        "ACTUALIZAR": "EDITAR",
+        "MODIFICAR": "EDITAR",
+        "BORRAR": "ELIMINAR",
+        "DELETE": "ELIMINAR",
+        "DESACTIVAR": "INACTIVAR"
+    }
+
+    return equivalencias.get(accion_limpia, accion_limpia)
+
+
 def limpiar_valor_ip(valor: Optional[str]) -> Optional[str]:
     """
     Limpia valores recibidos desde headers de proxy.
     Evita guardar valores vacíos, desconocidos o demasiado largos.
-    La columna ip_equipo ya fue ampliada a VARCHAR(100).
     """
     if valor is None:
         return None
@@ -95,22 +273,26 @@ def limpiar_valor_ip(valor: Optional[str]) -> Optional[str]:
     return valor_limpio[:100]
 
 
+def limpiar_navegador(valor: Optional[str]) -> Optional[str]:
+    if valor is None:
+        return None
+
+    valor_limpio = valor.strip()
+
+    if not valor_limpio:
+        return None
+
+    if valor_limpio.lower() in ["unknown", "null", "none", "undefined"]:
+        return None
+
+    return valor_limpio[:300]
+
+
 def obtener_ip_cliente(request: Request) -> str:
     """
     Obtiene la IP real del cliente desde FastAPI.
-
-    En producción, Render trabaja detrás de proxy, por eso se revisan primero
-    los headers más comunes:
-
-    1. cf-connecting-ip
-    2. x-forwarded-for
-    3. x-real-ip
-    4. request.client.host
-    5. 127.0.0.1 como respaldo final
-
-    No se depende del frontend para conocer la IP real.
+    En producción, Render trabaja detrás de proxy.
     """
-
     cf_ip = limpiar_valor_ip(request.headers.get("cf-connecting-ip"))
     if cf_ip:
         return cf_ip
@@ -135,16 +317,28 @@ def obtener_ip_cliente(request: Request) -> str:
     return "127.0.0.1"
 
 
+def obtener_navegador_cliente(request: Request) -> str:
+    navegador = limpiar_navegador(request.headers.get("user-agent"))
+    return navegador or "No identificado"
+
+
 def validar_usuario_activo(id_usuario: int, db: Session):
     usuario = db.execute(
         text("""
-            SELECT id_usuario
-            FROM usuarios
-            WHERE id_usuario = :id_usuario
-              AND estado = TRUE;
+            SELECT
+                u.id_usuario,
+                u.usuario,
+                u.nombres,
+                u.apellidos,
+                u.id_perfil,
+                p.nombre_perfil
+            FROM usuarios u
+            INNER JOIN perfiles p ON u.id_perfil = p.id_perfil
+            WHERE u.id_usuario = :id_usuario
+              AND u.estado = TRUE;
         """),
         {"id_usuario": id_usuario}
-    ).first()
+    ).mappings().first()
 
     if usuario is None:
         raise HTTPException(
@@ -152,26 +346,89 @@ def validar_usuario_activo(id_usuario: int, db: Session):
             detail="El usuario no existe o está inactivo."
         )
 
+    return usuario
 
-def crear_tablas_historicas_si_no_existen(db: Session):
-    """
-    Crea tablas históricas si no existen.
-    No borra información.
-    Sirve para archivar accesos y acciones antiguas.
-    """
-    db.execute(
-        text("""
-            CREATE TABLE IF NOT EXISTS auditoria_accesos_historico
-            (LIKE auditoria_accesos INCLUDING ALL);
-        """)
-    )
 
-    db.execute(
-        text("""
-            CREATE TABLE IF NOT EXISTS auditoria_acciones_historico
-            (LIKE auditoria_acciones INCLUDING ALL);
-        """)
-    )
+def construir_where_acciones(
+    usuario: Optional[str],
+    perfil: Optional[str],
+    modulo: Optional[str],
+    accion: Optional[str],
+    fecha_desde: Optional[date],
+    fecha_hasta: Optional[date]
+):
+    condiciones = []
+    parametros = {}
+
+    if usuario:
+        condiciones.append("u.usuario ILIKE :usuario")
+        parametros["usuario"] = f"%{usuario.strip()}%"
+
+    if perfil and perfil.lower() not in ["todos", "todas"]:
+        condiciones.append("p.nombre_perfil ILIKE :perfil")
+        parametros["perfil"] = f"%{perfil.strip()}%"
+
+    if modulo and modulo.lower() not in ["todos", "todas"]:
+        condiciones.append("aa.modulo ILIKE :modulo")
+        parametros["modulo"] = f"%{modulo.strip()}%"
+
+    if accion and accion.lower() not in ["todos", "todas"]:
+        condiciones.append("aa.accion ILIKE :accion")
+        parametros["accion"] = f"%{accion.strip()}%"
+
+    if fecha_desde:
+        condiciones.append("aa.fecha_accion >= :fecha_desde")
+        parametros["fecha_desde"] = fecha_desde
+
+    if fecha_hasta:
+        condiciones.append("aa.fecha_accion <= :fecha_hasta")
+        parametros["fecha_hasta"] = fecha_hasta
+
+    where_sql = ""
+
+    if condiciones:
+        where_sql = "WHERE " + " AND ".join(condiciones)
+
+    return where_sql, parametros
+
+
+def construir_where_accesos(
+    usuario: Optional[str],
+    perfil: Optional[str],
+    fecha_desde: Optional[date],
+    fecha_hasta: Optional[date],
+    estado_sesion: Optional[str]
+):
+    condiciones = []
+    parametros = {}
+
+    if usuario:
+        condiciones.append("u.usuario ILIKE :usuario")
+        parametros["usuario"] = f"%{usuario.strip()}%"
+
+    if perfil and perfil.lower() not in ["todos", "todas"]:
+        condiciones.append("p.nombre_perfil ILIKE :perfil")
+        parametros["perfil"] = f"%{perfil.strip()}%"
+
+    if fecha_desde:
+        condiciones.append("aa.fecha_ingreso >= :fecha_desde")
+        parametros["fecha_desde"] = fecha_desde
+
+    if fecha_hasta:
+        condiciones.append("aa.fecha_ingreso <= :fecha_hasta")
+        parametros["fecha_hasta"] = fecha_hasta
+
+    if estado_sesion and estado_sesion.lower() not in ["todos", "todas"]:
+        estado_normalizado = normalizar_estado_sesion(estado_sesion)
+        condiciones.append("aa.estado_sesion = :estado_sesion")
+        parametros["estado_sesion"] = estado_normalizado
+
+    where_sql = ""
+
+    if condiciones:
+        where_sql = "WHERE " + " AND ".join(condiciones)
+
+    return where_sql, parametros
 
 
 def registrar_accion_interna(
@@ -181,7 +438,9 @@ def registrar_accion_interna(
     accion: str,
     descripcion: str,
     tabla_afectada: Optional[str] = None,
-    id_registro_afectado: Optional[int] = None
+    id_registro_afectado: Optional[int] = None,
+    ip_equipo: Optional[str] = None,
+    navegador: Optional[str] = None
 ):
     """
     Registra acciones internas del propio módulo Auditoría.
@@ -201,7 +460,9 @@ def registrar_accion_interna(
                     fecha_accion,
                     hora_accion,
                     tabla_afectada,
-                    id_registro_afectado
+                    id_registro_afectado,
+                    ip_equipo,
+                    navegador
                 )
                 VALUES (
                     :id_usuario,
@@ -211,16 +472,20 @@ def registrar_accion_interna(
                     CURRENT_DATE,
                     CURRENT_TIME,
                     :tabla_afectada,
-                    :id_registro_afectado
+                    :id_registro_afectado,
+                    :ip_equipo,
+                    :navegador
                 );
             """),
             {
                 "id_usuario": id_usuario,
-                "modulo": modulo,
-                "accion": accion.strip().upper(),
-                "descripcion": descripcion,
+                "modulo": modulo.strip(),
+                "accion": normalizar_accion_auditoria(accion),
+                "descripcion": descripcion.strip(),
                 "tabla_afectada": tabla_afectada,
-                "id_registro_afectado": id_registro_afectado
+                "id_registro_afectado": id_registro_afectado,
+                "ip_equipo": ip_equipo,
+                "navegador": navegador
             }
         )
     except Exception:
@@ -230,7 +495,6 @@ def registrar_accion_interna(
 def cerrar_sesiones_activas_usuario(id_usuario: int, db: Session):
     """
     Cierra sesiones anteriores activas o abiertas del mismo usuario.
-    Se corrigió CAST para evitar error con SQLAlchemy y PostgreSQL.
     """
     ahora = datetime.now()
     fecha_salida = ahora.date()
@@ -263,27 +527,58 @@ def cerrar_sesiones_activas_usuario(id_usuario: int, db: Session):
 
 # =====================================================
 # LISTAR ACCIONES DE AUDITORÍA
-# Por defecto trae los últimos 50 registros.
 # =====================================================
 
 @router.get("/acciones")
 def listar_acciones(
     limite: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    usuario: Optional[str] = Query(None),
+    perfil: Optional[str] = Query(None),
+    modulo: Optional[str] = Query(None),
+    accion: Optional[str] = Query(None),
+    fecha_desde: Optional[date] = Query(None),
+    fecha_hasta: Optional[date] = Query(None),
     db: Session = Depends(get_db)
 ):
     try:
+        asegurar_estructura_auditoria(db)
+
+        where_sql, parametros = construir_where_acciones(
+            usuario=usuario,
+            perfil=perfil,
+            modulo=modulo,
+            accion=accion,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta
+        )
+
+        parametros["limite"] = limite
+        parametros["offset"] = offset
+
         resultado = db.execute(
-            text("""
-                SELECT *
-                FROM vista_auditoria_general
-                ORDER BY fecha_accion DESC, hora_accion DESC, id_accion DESC
+            text(f"""
+                SELECT
+                    aa.id_accion,
+                    u.usuario,
+                    p.nombre_perfil,
+                    aa.modulo,
+                    aa.accion,
+                    aa.descripcion,
+                    COALESCE(aa.tabla_afectada, '-') AS tabla_afectada,
+                    aa.id_registro_afectado,
+                    aa.fecha_accion,
+                    aa.hora_accion,
+                    COALESCE(aa.ip_equipo, '-') AS ip_equipo,
+                    COALESCE(aa.navegador, '-') AS navegador
+                FROM auditoria_acciones aa
+                INNER JOIN usuarios u ON aa.id_usuario = u.id_usuario
+                INNER JOIN perfiles p ON u.id_perfil = p.id_perfil
+                {where_sql}
+                ORDER BY aa.fecha_accion DESC, aa.hora_accion DESC, aa.id_accion DESC
                 LIMIT :limite OFFSET :offset;
             """),
-            {
-                "limite": limite,
-                "offset": offset
-            }
+            parametros
         )
 
         filas = resultado.mappings().all()
@@ -298,18 +593,35 @@ def listar_acciones(
 
 # =====================================================
 # LISTAR ACCESOS AL SISTEMA
-# Por defecto trae los últimos 50 registros.
 # =====================================================
 
 @router.get("/accesos")
 def listar_accesos(
     limite: int = Query(50, ge=1, le=500),
     offset: int = Query(0, ge=0),
+    usuario: Optional[str] = Query(None),
+    perfil: Optional[str] = Query(None),
+    fecha_desde: Optional[date] = Query(None),
+    fecha_hasta: Optional[date] = Query(None),
+    estado_sesion: Optional[str] = Query(None),
     db: Session = Depends(get_db)
 ):
     try:
+        asegurar_estructura_auditoria(db)
+
+        where_sql, parametros = construir_where_accesos(
+            usuario=usuario,
+            perfil=perfil,
+            fecha_desde=fecha_desde,
+            fecha_hasta=fecha_hasta,
+            estado_sesion=estado_sesion
+        )
+
+        parametros["limite"] = limite
+        parametros["offset"] = offset
+
         resultado = db.execute(
-            text("""
+            text(f"""
                 SELECT
                     aa.id_acceso,
                     u.usuario,
@@ -320,6 +632,7 @@ def listar_accesos(
                     aa.hora_salida,
                     COALESCE(aa.tiempo_conectado::text, '-') AS tiempo_conectado,
                     COALESCE(aa.ip_equipo, '127.0.0.1') AS ip_equipo,
+                    COALESCE(aa.navegador, '-') AS navegador,
                     CASE
                         WHEN LOWER(COALESCE(aa.estado_sesion, '')) IN ('activa', 'abierta', 'activo')
                             THEN 'Activa'
@@ -330,13 +643,11 @@ def listar_accesos(
                 FROM auditoria_accesos aa
                 INNER JOIN usuarios u ON aa.id_usuario = u.id_usuario
                 INNER JOIN perfiles p ON u.id_perfil = p.id_perfil
+                {where_sql}
                 ORDER BY aa.fecha_ingreso DESC, aa.hora_ingreso DESC, aa.id_acceso DESC
                 LIMIT :limite OFFSET :offset;
             """),
-            {
-                "limite": limite,
-                "offset": offset
-            }
+            parametros
         )
 
         filas = resultado.mappings().all()
@@ -356,6 +667,8 @@ def listar_accesos(
 @router.get("/resumen")
 def resumen_auditoria(db: Session = Depends(get_db)):
     try:
+        asegurar_estructura_auditoria(db)
+
         resultado = db.execute(
             text("""
                 SELECT
@@ -379,7 +692,7 @@ def resumen_auditoria(db: Session = Depends(get_db)):
                     (
                         SELECT COUNT(*)
                         FROM auditoria_acciones
-                        WHERE UPPER(accion) LIKE '%ACCESO_DENEGADO%'
+                        WHERE UPPER(accion) LIKE '%DENEGADO%'
                     ) AS accesos_denegados,
 
                     (
@@ -391,6 +704,10 @@ def resumen_auditoria(db: Session = Depends(get_db)):
                             OR UPPER(accion) LIKE '%EDITAR%'
                             OR UPPER(accion) LIKE '%MODIFICAR%'
                             OR UPPER(accion) LIKE '%ACTUALIZAR%'
+                            OR UPPER(accion) LIKE '%INACTIVAR%'
+                            OR UPPER(accion) LIKE '%SUSPENDER%'
+                            OR UPPER(accion) LIKE '%CAMBIO_SUELDO%'
+                            OR UPPER(accion) LIKE '%GENERAR_ROL%'
                     ) AS acciones_criticas,
 
                     (
@@ -413,68 +730,12 @@ def resumen_auditoria(db: Session = Depends(get_db)):
         fila = resultado.mappings().first()
         return dict(fila)
 
-    except Exception:
-        try:
-            crear_tablas_historicas_si_no_existen(db)
-            db.commit()
-
-            resultado = db.execute(
-                text("""
-                    SELECT
-                        (
-                            SELECT COUNT(*)
-                            FROM auditoria_accesos
-                            WHERE LOWER(COALESCE(estado_sesion, '')) IN ('activa', 'abierta', 'activo')
-                              AND fecha_salida IS NULL
-                        ) AS usuarios_conectados,
-
-                        (
-                            SELECT COUNT(*)
-                            FROM auditoria_accesos
-                        ) AS ingresos_registrados,
-
-                        (
-                            SELECT COUNT(*)
-                            FROM auditoria_acciones
-                        ) AS acciones_registradas,
-
-                        (
-                            SELECT COUNT(*)
-                            FROM auditoria_acciones
-                            WHERE UPPER(accion) LIKE '%ACCESO_DENEGADO%'
-                        ) AS accesos_denegados,
-
-                        (
-                            SELECT COUNT(*)
-                            FROM auditoria_acciones
-                            WHERE
-                                UPPER(accion) LIKE '%ELIMINAR%'
-                                OR UPPER(accion) LIKE '%ANULAR%'
-                                OR UPPER(accion) LIKE '%EDITAR%'
-                                OR UPPER(accion) LIKE '%MODIFICAR%'
-                                OR UPPER(accion) LIKE '%ACTUALIZAR%'
-                        ) AS acciones_criticas,
-
-                        (
-                            SELECT MAX(fecha_ingreso)
-                            FROM auditoria_accesos
-                        ) AS ultimo_acceso,
-
-                        0 AS accesos_historicos,
-
-                        0 AS acciones_historicas;
-                """)
-            )
-
-            fila = resultado.mappings().first()
-            return dict(fila)
-
-        except Exception as error:
-            db.rollback()
-            raise HTTPException(
-                status_code=500,
-                detail=f"Error al obtener resumen de auditoría: {str(error)}"
-            )
+    except Exception as error:
+        db.rollback()
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error al obtener resumen de auditoría: {str(error)}"
+        )
 
 
 # =====================================================
@@ -484,8 +745,7 @@ def resumen_auditoria(db: Session = Depends(get_db)):
 @router.get("/mantenimiento/resumen")
 def resumen_mantenimiento_auditoria(db: Session = Depends(get_db)):
     try:
-        crear_tablas_historicas_si_no_existen(db)
-        db.commit()
+        asegurar_estructura_auditoria(db)
 
         resultado = db.execute(
             text("""
@@ -536,6 +796,7 @@ def registrar_acceso(
     db: Session = Depends(get_db)
 ):
     try:
+        asegurar_estructura_auditoria(db)
         validar_usuario_activo(acceso.id_usuario, db)
 
         estado_sesion = normalizar_estado_sesion(acceso.estado_sesion)
@@ -545,6 +806,7 @@ def registrar_acceso(
         hora_ingreso = acceso.hora_ingreso or ahora.time().replace(microsecond=0)
 
         ip_cliente = obtener_ip_cliente(request)
+        navegador_cliente = limpiar_navegador(acceso.navegador) or obtener_navegador_cliente(request)
 
         cerrar_sesiones_activas_usuario(acceso.id_usuario, db)
 
@@ -554,6 +816,7 @@ def registrar_acceso(
                 fecha_ingreso,
                 hora_ingreso,
                 ip_equipo,
+                navegador,
                 estado_sesion
             )
             VALUES (
@@ -561,6 +824,7 @@ def registrar_acceso(
                 :fecha_ingreso,
                 :hora_ingreso,
                 :ip_equipo,
+                :navegador,
                 :estado_sesion
             )
             RETURNING id_acceso;
@@ -573,6 +837,7 @@ def registrar_acceso(
                 "fecha_ingreso": fecha_ingreso,
                 "hora_ingreso": hora_ingreso,
                 "ip_equipo": ip_cliente,
+                "navegador": navegador_cliente,
                 "estado_sesion": estado_sesion
             }
         )
@@ -585,10 +850,12 @@ def registrar_acceso(
             "mensaje": "Acceso registrado correctamente",
             "id_acceso": nuevo_acceso["id_acceso"],
             "estado_sesion": estado_sesion,
-            "ip_equipo": ip_cliente
+            "ip_equipo": ip_cliente,
+            "navegador": navegador_cliente
         }
 
     except HTTPException:
+        db.rollback()
         raise
 
     except Exception as error:
@@ -606,6 +873,8 @@ def registrar_acceso(
 @router.put("/cerrar-sesion")
 def cerrar_sesion(datos: CierreSesionCreate, db: Session = Depends(get_db)):
     try:
+        asegurar_estructura_auditoria(db)
+
         ahora = datetime.now()
 
         fecha_salida = datos.fecha_salida or ahora.date()
@@ -652,6 +921,16 @@ def cerrar_sesion(datos: CierreSesionCreate, db: Session = Depends(get_db)):
                 detail="Acceso no encontrado."
             )
 
+        registrar_accion_interna(
+            db=db,
+            id_usuario=acceso["id_usuario"],
+            modulo="Seguridad",
+            accion="LOGOUT",
+            descripcion="El usuario cerró sesión en el sistema.",
+            tabla_afectada="auditoria_accesos",
+            id_registro_afectado=acceso["id_acceso"]
+        )
+
         db.commit()
 
         return {
@@ -660,6 +939,7 @@ def cerrar_sesion(datos: CierreSesionCreate, db: Session = Depends(get_db)):
         }
 
     except HTTPException:
+        db.rollback()
         raise
 
     except Exception as error:
@@ -677,6 +957,7 @@ def cerrar_sesion(datos: CierreSesionCreate, db: Session = Depends(get_db)):
 @router.put("/cerrar-sesion-usuario")
 def cerrar_sesion_usuario(datos: CierreSesionUsuarioCreate, db: Session = Depends(get_db)):
     try:
+        asegurar_estructura_auditoria(db)
         validar_usuario_activo(datos.id_usuario, db)
 
         ahora = datetime.now()
@@ -733,6 +1014,16 @@ def cerrar_sesion_usuario(datos: CierreSesionUsuarioCreate, db: Session = Depend
                 detail="No existe una sesión activa para este usuario."
             )
 
+        registrar_accion_interna(
+            db=db,
+            id_usuario=acceso["id_usuario"],
+            modulo="Seguridad",
+            accion="LOGOUT",
+            descripcion="Sesión cerrada correctamente para el usuario.",
+            tabla_afectada="auditoria_accesos",
+            id_registro_afectado=acceso["id_acceso"]
+        )
+
         db.commit()
 
         return {
@@ -741,6 +1032,7 @@ def cerrar_sesion_usuario(datos: CierreSesionUsuarioCreate, db: Session = Depend
         }
 
     except HTTPException:
+        db.rollback()
         raise
 
     except Exception as error:
@@ -761,6 +1053,8 @@ def cerrar_sesiones_antiguas(
     db: Session = Depends(get_db)
 ):
     try:
+        asegurar_estructura_auditoria(db)
+
         if datos.horas_antiguedad < 1:
             raise HTTPException(
                 status_code=400,
@@ -787,7 +1081,7 @@ def cerrar_sesiones_antiguas(
                 WHERE LOWER(COALESCE(estado_sesion, '')) IN ('activa', 'abierta', 'activo')
                   AND fecha_salida IS NULL
                   AND (fecha_ingreso::timestamp + hora_ingreso) < (NOW() - (:horas_antiguedad * INTERVAL '1 hour'))
-                RETURNING id_acceso;
+                RETURNING id_acceso, id_usuario;
             """),
             {
                 "fecha_salida": fecha_salida,
@@ -798,6 +1092,18 @@ def cerrar_sesiones_antiguas(
 
         filas = resultado.mappings().all()
         total_cerradas = len(filas)
+
+        id_usuario_registro = filas[0]["id_usuario"] if filas else None
+
+        registrar_accion_interna(
+            db=db,
+            id_usuario=id_usuario_registro,
+            modulo="Auditoría",
+            accion="CERRAR_SESIONES_ANTIGUAS",
+            descripcion=f"Se cerraron {total_cerradas} sesiones activas antiguas mayores a {datos.horas_antiguedad} horas.",
+            tabla_afectada="auditoria_accesos",
+            id_registro_afectado=None
+        )
 
         db.commit()
 
@@ -823,29 +1129,67 @@ def cerrar_sesiones_antiguas(
 # =====================================================
 
 @router.post("/registrar-accion")
-def registrar_accion(datos: AccionCreate, db: Session = Depends(get_db)):
+def registrar_accion(
+    datos: AccionCreate,
+    request: Request,
+    db: Session = Depends(get_db)
+):
     try:
+        asegurar_estructura_auditoria(db)
         validar_usuario_activo(datos.id_usuario, db)
 
-        if not datos.modulo.strip():
+        modulo = datos.modulo.strip()
+        accion_normalizada = normalizar_accion_auditoria(datos.accion)
+        descripcion = datos.descripcion.strip()
+
+        if not modulo:
             raise HTTPException(
                 status_code=400,
                 detail="El módulo es obligatorio."
             )
 
-        if not datos.accion.strip():
+        if not accion_normalizada:
             raise HTTPException(
                 status_code=400,
                 detail="La acción es obligatoria."
             )
 
-        if not datos.descripcion.strip():
+        if not descripcion:
             raise HTTPException(
                 status_code=400,
                 detail="La descripción es obligatoria."
             )
 
         ahora = datetime.now()
+
+        ip_cliente = limpiar_valor_ip(datos.ip_equipo) or obtener_ip_cliente(request)
+        navegador_cliente = limpiar_navegador(datos.navegador) or obtener_navegador_cliente(request)
+
+        # Evita duplicar ingresos de módulo cuando main.js y otro archivo llaman al mismo tiempo.
+        if accion_normalizada == "INGRESO_MODULO":
+            accion_duplicada = db.execute(
+                text("""
+                    SELECT id_accion
+                    FROM auditoria_acciones
+                    WHERE id_usuario = :id_usuario
+                      AND modulo = :modulo
+                      AND accion = 'INGRESO_MODULO'
+                      AND (fecha_accion::timestamp + hora_accion) >= (NOW() - INTERVAL '5 seconds')
+                    ORDER BY id_accion DESC
+                    LIMIT 1;
+                """),
+                {
+                    "id_usuario": datos.id_usuario,
+                    "modulo": modulo
+                }
+            ).mappings().first()
+
+            if accion_duplicada is not None:
+                return {
+                    "mensaje": "Acción duplicada ignorada correctamente.",
+                    "id_accion": accion_duplicada["id_accion"],
+                    "duplicada": True
+                }
 
         consulta = text("""
             INSERT INTO auditoria_acciones (
@@ -856,7 +1200,9 @@ def registrar_accion(datos: AccionCreate, db: Session = Depends(get_db)):
                 fecha_accion,
                 hora_accion,
                 tabla_afectada,
-                id_registro_afectado
+                id_registro_afectado,
+                ip_equipo,
+                navegador
             )
             VALUES (
                 :id_usuario,
@@ -866,7 +1212,9 @@ def registrar_accion(datos: AccionCreate, db: Session = Depends(get_db)):
                 :fecha_accion,
                 :hora_accion,
                 :tabla_afectada,
-                :id_registro_afectado
+                :id_registro_afectado,
+                :ip_equipo,
+                :navegador
             )
             RETURNING id_accion;
         """)
@@ -875,13 +1223,15 @@ def registrar_accion(datos: AccionCreate, db: Session = Depends(get_db)):
             consulta,
             {
                 "id_usuario": datos.id_usuario,
-                "modulo": datos.modulo.strip(),
-                "accion": datos.accion.strip().upper(),
-                "descripcion": datos.descripcion.strip(),
+                "modulo": modulo,
+                "accion": accion_normalizada,
+                "descripcion": descripcion,
                 "fecha_accion": ahora.date(),
                 "hora_accion": ahora.time().replace(microsecond=0),
                 "tabla_afectada": datos.tabla_afectada,
-                "id_registro_afectado": datos.id_registro_afectado
+                "id_registro_afectado": datos.id_registro_afectado,
+                "ip_equipo": ip_cliente,
+                "navegador": navegador_cliente
             }
         )
 
@@ -891,10 +1241,13 @@ def registrar_accion(datos: AccionCreate, db: Session = Depends(get_db)):
 
         return {
             "mensaje": "Acción registrada correctamente en auditoría",
-            "id_accion": nueva_accion["id_accion"]
+            "id_accion": nueva_accion["id_accion"],
+            "ip_equipo": ip_cliente,
+            "accion": accion_normalizada
         }
 
     except HTTPException:
+        db.rollback()
         raise
 
     except Exception as error:
@@ -915,13 +1268,13 @@ def archivar_auditoria_antigua(
     db: Session = Depends(get_db)
 ):
     try:
+        asegurar_estructura_auditoria(db)
+
         if datos.dias_antiguedad < 1:
             raise HTTPException(
                 status_code=400,
                 detail="Los días de antigüedad deben ser mayores o iguales a 1."
             )
-
-        crear_tablas_historicas_si_no_existen(db)
 
         # Archivar accesos cerrados antiguos.
         accesos_insertados = db.execute(
@@ -1026,12 +1379,28 @@ def listar_acciones_por_modulo(
     db: Session = Depends(get_db)
 ):
     try:
+        asegurar_estructura_auditoria(db)
+
         resultado = db.execute(
             text("""
-                SELECT *
-                FROM vista_auditoria_general
-                WHERE modulo ILIKE :modulo
-                ORDER BY fecha_accion DESC, hora_accion DESC, id_accion DESC
+                SELECT
+                    aa.id_accion,
+                    u.usuario,
+                    p.nombre_perfil,
+                    aa.modulo,
+                    aa.accion,
+                    aa.descripcion,
+                    COALESCE(aa.tabla_afectada, '-') AS tabla_afectada,
+                    aa.id_registro_afectado,
+                    aa.fecha_accion,
+                    aa.hora_accion,
+                    COALESCE(aa.ip_equipo, '-') AS ip_equipo,
+                    COALESCE(aa.navegador, '-') AS navegador
+                FROM auditoria_acciones aa
+                INNER JOIN usuarios u ON aa.id_usuario = u.id_usuario
+                INNER JOIN perfiles p ON u.id_perfil = p.id_perfil
+                WHERE aa.modulo ILIKE :modulo
+                ORDER BY aa.fecha_accion DESC, aa.hora_accion DESC, aa.id_accion DESC
                 LIMIT :limite OFFSET :offset;
             """),
             {
@@ -1063,12 +1432,28 @@ def listar_acciones_por_usuario(
     db: Session = Depends(get_db)
 ):
     try:
+        asegurar_estructura_auditoria(db)
+
         resultado = db.execute(
             text("""
-                SELECT *
-                FROM vista_auditoria_general
-                WHERE usuario ILIKE :usuario
-                ORDER BY fecha_accion DESC, hora_accion DESC, id_accion DESC
+                SELECT
+                    aa.id_accion,
+                    u.usuario,
+                    p.nombre_perfil,
+                    aa.modulo,
+                    aa.accion,
+                    aa.descripcion,
+                    COALESCE(aa.tabla_afectada, '-') AS tabla_afectada,
+                    aa.id_registro_afectado,
+                    aa.fecha_accion,
+                    aa.hora_accion,
+                    COALESCE(aa.ip_equipo, '-') AS ip_equipo,
+                    COALESCE(aa.navegador, '-') AS navegador
+                FROM auditoria_acciones aa
+                INNER JOIN usuarios u ON aa.id_usuario = u.id_usuario
+                INNER JOIN perfiles p ON u.id_perfil = p.id_perfil
+                WHERE u.usuario ILIKE :usuario
+                ORDER BY aa.fecha_accion DESC, aa.hora_accion DESC, aa.id_accion DESC
                 LIMIT :limite OFFSET :offset;
             """),
             {
@@ -1099,18 +1484,39 @@ def listar_acciones_criticas(
     db: Session = Depends(get_db)
 ):
     try:
+        asegurar_estructura_auditoria(db)
+
         resultado = db.execute(
             text("""
-                SELECT *
-                FROM vista_auditoria_general
+                SELECT
+                    aa.id_accion,
+                    u.usuario,
+                    p.nombre_perfil,
+                    aa.modulo,
+                    aa.accion,
+                    aa.descripcion,
+                    COALESCE(aa.tabla_afectada, '-') AS tabla_afectada,
+                    aa.id_registro_afectado,
+                    aa.fecha_accion,
+                    aa.hora_accion,
+                    COALESCE(aa.ip_equipo, '-') AS ip_equipo,
+                    COALESCE(aa.navegador, '-') AS navegador
+                FROM auditoria_acciones aa
+                INNER JOIN usuarios u ON aa.id_usuario = u.id_usuario
+                INNER JOIN perfiles p ON u.id_perfil = p.id_perfil
                 WHERE
-                    UPPER(accion) LIKE '%ELIMINAR%'
-                    OR UPPER(accion) LIKE '%ANULAR%'
-                    OR UPPER(accion) LIKE '%EDITAR%'
-                    OR UPPER(accion) LIKE '%MODIFICAR%'
-                    OR UPPER(accion) LIKE '%ACTUALIZAR%'
-                    OR UPPER(accion) LIKE '%ACCESO_DENEGADO%'
-                ORDER BY fecha_accion DESC, hora_accion DESC, id_accion DESC
+                    UPPER(aa.accion) LIKE '%ELIMINAR%'
+                    OR UPPER(aa.accion) LIKE '%ANULAR%'
+                    OR UPPER(aa.accion) LIKE '%EDITAR%'
+                    OR UPPER(aa.accion) LIKE '%MODIFICAR%'
+                    OR UPPER(aa.accion) LIKE '%ACTUALIZAR%'
+                    OR UPPER(aa.accion) LIKE '%INACTIVAR%'
+                    OR UPPER(aa.accion) LIKE '%SUSPENDER%'
+                    OR UPPER(aa.accion) LIKE '%CAMBIO_SUELDO%'
+                    OR UPPER(aa.accion) LIKE '%GENERAR_ROL%'
+                    OR UPPER(aa.accion) LIKE '%ACCESO_DENEGADO%'
+                    OR UPPER(aa.accion) LIKE '%DENEGADO%'
+                ORDER BY aa.fecha_accion DESC, aa.hora_accion DESC, aa.id_accion DESC
                 LIMIT :limite OFFSET :offset;
             """),
             {
